@@ -14,13 +14,13 @@ config.read(os.getcwd()+"/t_credentials.ini")
 t_conf = config['TELEGRAM']
 PORT = int(os.environ.get('PORT', '8443'))
 #On Heroku:
-#DATABASE_URL = os.environ['DATABASE_URL']
-#HOOK_URL = os.environ['HOOK_URL']
-#TOKEN = os.environ['TOKEN']
+DATABASE_URL = os.environ['DATABASE_URL']
+HOOK_URL = os.environ['HOOK_URL']
+TOKEN = os.environ['TOKEN']
 #On local:
-DATABASE_URL = t_conf.get('database_url')
-HOOK_URL = t_conf.get('hook_url')
-TOKEN = t_conf.get('token')
+# DATABASE_URL = t_conf.get('database_url')
+# HOOK_URL = t_conf.get('hook_url')
+# TOKEN = t_conf.get('token')
 
 #LOGS:
 #Set DB logger:
