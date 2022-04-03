@@ -24,6 +24,10 @@ def echo(update, context):
     """Echo the user message."""
     update.message.reply_text(update.message.text)
 
+def error(update, context):
+    """Log Errors caused by Updates."""
+    tlog.warning('Update "%s" caused error "%s"', update, context.error)
+
 #ADD NEW PRODUCT TO DB:
 #1) ask p_code mode: text or photo:
 def prodotto(update: Update, context: CallbackContext) -> int:
@@ -371,14 +375,15 @@ def prodotti(update: Update, context: CallbackContext) -> int:
         ax.axis('off')
         ax.table(cellText=Prodotti.values,colLabels=Prodotti.columns,loc='center')
         #export table to pdf:
-        filename = './telegram_support/data_cache/prodotti.pdf'
+        filename = './data_cache/prodotti.pdf'
         pp = PdfPages(filename)
         pp.savefig(fig, bbox_inches='tight')
         pp.close()
         #send pdf:
         pdfdoc = open(filename, 'rb')
         chat_id=update.effective_chat.id
-        return context.bot.send_document(chat_id, pdfdoc)
+        context.bot.send_document(chat_id, pdfdoc)
+        os.remove(filename)
     # except:
     #     msg = f"C'è stato un problema col mio DB, ti chiedo scusa!"
     #     update.message.reply_text(msg)
@@ -420,9 +425,7 @@ def main() -> None:
             SAVE_EDIT: [CallbackQueryHandler(save_to_db, pattern='.*')],
             ASK_REWRITE: [CallbackQueryHandler(ask_rewrite, pattern='.*')],
         },
-        fallbacks=[
-            CommandHandler('esci', esci),
-            MessageHandler(Filters.regex("^(Esci|Stop|Basta|Annulla)$"), esci)])
+        fallbacks=[CommandHandler('error', error)])
     dispatcher.add_handler(conv_handler)
 
     #message handlers:
@@ -430,6 +433,14 @@ def main() -> None:
 
     #start polling:
     updater.start_polling()
+
+    #webhook:
+    # updater.start_webhook(
+    #     listen="0.0.0.0",
+    #     port=int(PORT),
+    #     url_path=TOKEN,
+    #     webhook_url = HOOK_URL + TOKEN
+    # )
 
     #idle:
     updater.idle()

@@ -8,12 +8,13 @@ from globals import *
 #scan image for barcodes and extract pcode:
 def extract_barcode(image):
     #get photo sent by user:
-    image_name = './telegram_support/data_cache/barcode.jpg'
+    image_name = './data_cache/barcode.jpg'
     image.download(image_name)
     #read barcode in photo:
     decoded = pyzbar.decode(Image.open(image_name))
     p_code = decoded[0].data
     p_code = p_code.decode("utf-8")
+    os.remove(image_name)
     return p_code
 
 #inline picker keyboard:

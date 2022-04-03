@@ -4,17 +4,16 @@ import pandas as pd
 
 #GLOBAL IMPORTS, PARAMETERS & INSTANTIATIONS:
 
-#GLOBALS:
-DB_FILE = "database/erboristeria.db"
-THRESHOLD_TO_ORD = 5
-MONTHS = ["gennaio", "febbraio", "marzo", "aprile", "maggio", "giugno", "luglio", "agosto", "settembre", "ottobre", "novembre", "dicembre"]
-
-#TELEGRAM BOT:
+#HERBIE T-BOT:
 #Config:
 config = configparser.ConfigParser()
 print(os.getcwd())
 config.read(os.getcwd()+"/t_credentials.ini")
 t_conf = config['TELEGRAM']
+
+#Webhook:
+PORT = int(os.environ.get('PORT', '8443'))
+HOOK_URL = 'https://herbie-tbot.herokuapp.com/'
 TOKEN = str(t_conf.get('token'))
 
 #LOGS:
