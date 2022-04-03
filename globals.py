@@ -1,8 +1,10 @@
-import os, sqlite3, logging, configparser, time, json, pytz
+import os, psycopg2, logging, configparser, time, json, pytz
 from datetime import datetime, date
 import pandas as pd
 
 #GLOBAL IMPORTS, PARAMETERS & INSTANTIATIONS:
+#Connect to:
+SCHEMA = 'Test'
 
 #HERBIE T-BOT:
 #Config:
@@ -10,11 +12,15 @@ config = configparser.ConfigParser()
 print(os.getcwd())
 config.read(os.getcwd()+"/t_credentials.ini")
 t_conf = config['TELEGRAM']
-
-#Webhook:
 PORT = int(os.environ.get('PORT', '8443'))
-HOOK_URL = 'https://herbie-tbot.herokuapp.com/'
-TOKEN = str(t_conf.get('token'))
+#On Heroku:
+#DATABASE_URL = os.environ['DATABASE_URL']
+#HOOK_URL = os.environ['HOOK_URL']
+#TOKEN = os.environ['TOKEN']
+#On local:
+DATABASE_URL = t_conf.get('database_url')
+HOOK_URL = t_conf.get('hook_url')
+TOKEN = t_conf.get('token')
 
 #LOGS:
 #Set DB logger:

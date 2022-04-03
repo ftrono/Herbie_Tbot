@@ -431,16 +431,19 @@ def main() -> None:
     #message handlers:
     dispatcher.add_handler(MessageHandler(Filters.text, echo))
 
+    #log all errors:
+    dispatcher.add_error_handler(error)
+
     #start polling:
-    updater.start_polling()
+    #updater.start_polling()
 
     #webhook:
-    # updater.start_webhook(
-    #     listen="0.0.0.0",
-    #     port=int(PORT),
-    #     url_path=TOKEN,
-    #     webhook_url = HOOK_URL + TOKEN
-    # )
+    updater.start_webhook(
+        listen="0.0.0.0",
+        port=int(PORT),
+        url_path=TOKEN,
+        webhook_url = HOOK_URL + TOKEN
+    )
 
     #idle:
     updater.idle()
