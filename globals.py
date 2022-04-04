@@ -10,6 +10,7 @@ SCHEMA = 'Test'
 PORT = int(os.environ.get('PORT', '8443'))
 try:
     #On local -> use config file:
+    ENV = 'local'
     config = configparser.ConfigParser()
     print(os.getcwd())
     config.read(os.getcwd()+"/t_credentials.ini")
@@ -19,6 +20,7 @@ try:
     TOKEN = t_conf.get('token')
 except:
     #On Heroku -> use global config vars:
+    ENV = 'heroku'
     DATABASE_URL = os.environ['DATABASE_URL']
     HOOK_URL = os.environ['HOOK_URL']
     TOKEN = os.environ['TOKEN']

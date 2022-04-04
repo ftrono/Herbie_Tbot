@@ -9,12 +9,45 @@ from globals import *
 
 #HERBIE TELEGRAM BOT
 #GLOBALS:
+START, PICK_WH = range(2)
 PROCESS_PCODE, INIT_ADD, PROCESS_SUPPLIER, PROCESS_PNAME, PROCESS_CATEGORY, PROCESS_PIECES, SAVE_EDIT, ASK_REWRITE = range(8)
 CONV_END = -1 #value of ConversationHandler.END
 
 #START:
 def start(update: Update, context: CallbackContext) -> int:
-    update.message.reply_text("Ciao!")
+    chat_id = update.effective_chat.id
+    nome, auths = db_interactor.get_auths(chat_id)
+    if auths == []:
+        context.user_data['schema'] = SCHEMA
+        msg = f"Ciao! Benvenuto nel mio magazzino di <b>{SCHEMA}</b>.\nIl tuo chat id è: {chat_id}. Per richiedere autorizzazioni diverse potrai inviare questo codice all'amministratore.\n\nLancia un comando per iniziare!"
+        update.message.reply_text(msg, parse_mode=ParseMode.HTML)
+        return CONV_END
+    elif len(auths) == 1:
+        schema = auths[0]
+        context.user_data['schema'] = schema
+        msg = f"Ciao {nome.capitalize()}! Benvenuto nel mio magazzino di <b>{schema}</b>.\nIl tuo chat id è: {chat_id}.\n\nLancia un comando per iniziare!"
+        update.message.reply_text(msg, parse_mode=ParseMode.HTML)
+        return CONV_END
+    else:
+        keyboard = []
+        for auth in auths:
+            msg = f"Ciao {nome.capitalize()}! Su quale magazzino vuoi operare?"
+            keyboard.append([InlineKeyboardButton(auth, callback_data=auth)])
+            context.bot.send_message(chat_id=update.effective_chat.id, text=msg)
+            return PICK_WH
+
+def pick_wh(update: Update, context: CallbackContext) -> int:
+    #get open query:
+    query = update.callback_query
+    schema = query.data
+    tlog.info(schema)
+    query.edit_message_reply_markup(reply_markup=None)
+    query.answer()
+    context.user_data['schema'] = schema
+    chat_id = update.effective_chat.id
+    msg = f"Benvenuto nel mio magazzino di <b>{schema}</b>.\nIl tuo chat id è: {chat_id}.\n\nLancia un comando per iniziare!"
+    update.message.reply_text(msg, parse_mode=ParseMode.HTML)
+    return CONV_END
 
 def help(update, context):
     """Send a message when the command /help is issued."""
@@ -41,6 +74,7 @@ def prodotto(update: Update, context: CallbackContext) -> int:
 #3) process p_code:
 def process_pcode(update: Update, context: CallbackContext) -> int:
     p_code = None
+    schema = context.user_data.get('schema', SCHEMA)
     msg = f"Sto estraendo i dati..."
     message = context.bot.send_message(chat_id=update.effective_chat.id, text=msg)
     #1) check if message sent by usercontains a photo:
@@ -71,10 +105,10 @@ def process_pcode(update: Update, context: CallbackContext) -> int:
     #3) check if prod in DB:
     try:
         conn, cursor = db_connect()
-        prod = db_interactor.get_prodinfo(conn, {'p_code': p_code})
+        Prodotto = db_interactor.get_product(conn, schema, p_code)
         conn.close()
         #a) if product not found -> new product:
-        if prod == []:
+        if Prodotto.empty == True:
             context.user_data['in_db'] = False
             msg = f"{msg} Questo prodotto non è nel mio magazzino. Lo inseriamo ora?"
             keyboard = [[InlineKeyboardButton('Sì', callback_data='Sì'),
@@ -86,19 +120,18 @@ def process_pcode(update: Update, context: CallbackContext) -> int:
 
         #b) if product found -> edit info / add info:
         else:
-            prod = prod[0]
             context.user_data['in_db'] = True
             #store additional info in bot memory:
-            context.user_data['supplier'] = prod['supplier']
-            context.user_data['p_name'] = prod['p_name']
-            context.user_data['category'] = prod['category']
-            context.user_data['pieces'] = prod['pieces']
+            context.user_data['supplier'] = Prodotto['produttore'].iloc[0]
+            context.user_data['p_name'] = Prodotto['nome'].iloc[0]
+            context.user_data['category'] = Prodotto['categoria'].iloc[0]
+            context.user_data['pieces'] = Prodotto['quantita'].iloc[0]
             #ask what to do:
             msg = f"{msg}Ti invio il recap del prodotto:\n"+\
-                f"- Produttore: {prod['supplier']}\n"+\
-                f"- Nome: {prod['p_name']}\n"+\
-                f"- Categoria: {prod['category']}\n"+\
-                f"- Numero di pezzi: {prod['pieces']}\n"+\
+                f"- Produttore: {Prodotto['produttore'].iloc[0]}\n"+\
+                f"- Nome: {Prodotto['nome'].iloc[0]}\n"+\
+                f"- Categoria: {Prodotto['categoria'].iloc[0]}\n"+\
+                f"- Numero di pezzi: {Prodotto['quantita'].iloc[0]}\n"+\
                 f"\nCosa vuoi fare?"
             keyboard = [[InlineKeyboardButton('Modifica info', callback_data='Modifica info')],
                         [InlineKeyboardButton('Aggiungi info', callback_data='Aggiungi info')],
@@ -127,8 +160,9 @@ def init_add(update: Update, context: CallbackContext) -> int:
         context.bot.send_message(chat_id=update.effective_chat.id, text=msg)
         return CONV_END
     else:
+        schema = context.user_data.get('schema', SCHEMA)
         #supplier picker:
-        keyboard = bot_functions.inline_picker('Produttore')
+        keyboard = bot_functions.inline_picker(schema, 'Produttore')
         msg = f"Iniziamo. Dimmi il nome del <b>produttore</b>.\n\nOppure scrivi /esci per uscire."
         context.bot.send_message(chat_id=update.effective_chat.id, text=msg, 
             parse_mode=ParseMode.HTML, 
@@ -179,7 +213,8 @@ def process_pname(update: Update, context: CallbackContext) -> int:
     #next message:
     msg = f"Segnato nome {p_name}! Ora dimmi a quale <b>categoria</b> appartiene (es. cosmesi, alimentazione, ...).\n\nOppure scrivi /esci per uscire."
     #category picker:
-    keyboard = bot_functions.inline_picker('Categoria')
+    schema = context.user_data.get('schema', SCHEMA)
+    keyboard = bot_functions.inline_picker(schema, 'Categoria')
     update.message.reply_text(msg, 
         parse_mode=ParseMode.HTML, 
         reply_markup=InlineKeyboardMarkup(keyboard))
@@ -279,6 +314,7 @@ def save_to_db(update: Update, context: CallbackContext) -> int:
 
     #trigger STORE TO DB:
     if choice == 'Sì':
+        schema = context.user_data.get('schema', SCHEMA)
         p_code = int(context.user_data['p_code'])
         utts = {
             'p_code': p_code,
@@ -290,8 +326,8 @@ def save_to_db(update: Update, context: CallbackContext) -> int:
         try:
             conn, cursor = db_connect()
             if context.user_data.get('in_db') == True:
-                ret = db_interactor.delete_prod(conn, cursor, p_code)
-            ret = db_interactor.add_prod(conn, cursor, utts)
+                ret = db_interactor.delete_prod(conn, cursor, schema, p_code)
+            ret = db_interactor.add_prod(conn, cursor, schema, utts)
             conn.close()
         except:
             err = True
@@ -366,7 +402,8 @@ def esci(update: Update, context: CallbackContext) -> int:
 def prodotti(update: Update, context: CallbackContext) -> int:
     # try:
     conn, cursor = db_connect()
-    Prodotti = db_interactor.get_view_prodotti(conn)
+    schema = context.user_data.get('schema', SCHEMA)
+    Prodotti = db_interactor.get_view_prodotti(conn, schema)
     conn.close()
     if Prodotti.empty == False:
         #build plt table:
@@ -402,6 +439,17 @@ def main() -> None:
     #dispatcher.add_handler(CommandHandler("prodotti", prodotti))
 
     #conversation handlers:
+    #start & login ("/start"):
+    conv_handler = ConversationHandler(
+        entry_points=[
+                CommandHandler('start', start),
+                MessageHandler(Filters.regex("^(Magazzino|Scegli|Login)$"), start)],
+        states={
+            PICK_WH: [CallbackQueryHandler(pick_wh, pattern='.*')],
+        },
+        fallbacks=[CommandHandler('error', error)])
+    dispatcher.add_handler(conv_handler)
+
     #add new product ("/nuovo"):
     conv_handler = ConversationHandler(
         entry_points=[
@@ -434,16 +482,17 @@ def main() -> None:
     #log all errors:
     dispatcher.add_error_handler(error)
 
-    #start polling:
-    # updater.start_polling()
-
     #webhook:
-    updater.start_webhook(
-        listen="0.0.0.0",
-        port=int(PORT),
-        url_path=TOKEN,
-        webhook_url = HOOK_URL + TOKEN
-    )
+    if ENV == 'heroku':
+        updater.start_webhook(
+            listen="0.0.0.0",
+            port=int(PORT),
+            url_path=TOKEN,
+            webhook_url = HOOK_URL + TOKEN
+        )
+    else:
+        #start polling:
+        updater.start_polling()
 
     #idle:
     updater.idle()
