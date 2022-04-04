@@ -46,7 +46,7 @@ def pick_wh(update: Update, context: CallbackContext) -> int:
     context.user_data['schema'] = schema
     chat_id = update.effective_chat.id
     msg = f"Benvenuto nel mio magazzino di <b>{schema}</b>.\nIl tuo chat id è: {chat_id}.\n\nLancia un comando per iniziare!"
-    update.message.reply_text(msg, parse_mode=ParseMode.HTML)
+    context.bot.send_message(chat_id=update.effective_chat.id, text=msg, parse_mode=ParseMode.HTML)
     return CONV_END
 
 def help(update, context):
