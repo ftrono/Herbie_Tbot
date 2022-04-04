@@ -7,20 +7,21 @@ import pandas as pd
 SCHEMA = 'Test'
 
 #CONFIG:
-#On Heroku:
 PORT = int(os.environ.get('PORT', '8443'))
-DATABASE_URL = os.environ['DATABASE_URL']
-HOOK_URL = os.environ['HOOK_URL']
-TOKEN = os.environ['TOKEN']
-
-#On local:
-# config = configparser.ConfigParser()
-# print(os.getcwd())
-# config.read(os.getcwd()+"/t_credentials.ini")
-# t_conf = config['TELEGRAM']
-# DATABASE_URL = t_conf.get('database_url')
-# HOOK_URL = t_conf.get('hook_url')
-# TOKEN = t_conf.get('token')
+try:
+    #On local -> use config file:
+    config = configparser.ConfigParser()
+    print(os.getcwd())
+    config.read(os.getcwd()+"/t_credentials.ini")
+    t_conf = config['TELEGRAM']
+    DATABASE_URL = t_conf.get('database_url')
+    HOOK_URL = t_conf.get('hook_url')
+    TOKEN = t_conf.get('token')
+except:
+    #On Heroku -> use global config vars:
+    DATABASE_URL = os.environ['DATABASE_URL']
+    HOOK_URL = os.environ['HOOK_URL']
+    TOKEN = os.environ['TOKEN']
 
 
 #LOGS:
