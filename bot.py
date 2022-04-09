@@ -1,7 +1,7 @@
 from telegram import ReplyKeyboardRemove, Update, ParseMode, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import Updater, CommandHandler, MessageHandler, Filters, ConversationHandler, CallbackQueryHandler, CallbackContext
 import database.db_interactor as db_interactor
-from database.db_tools import db_connect
+from database.db_tools import db_connect, db_disconnect
 import bot_functions
 import matplotlib.pyplot as plt
 from matplotlib.backends.backend_pdf import PdfPages
@@ -9,62 +9,137 @@ from globals import *
 
 #HERBIE TELEGRAM BOT
 #GLOBALS:
-START, PICK_WH = range(2)
+START, PICK_WH, SET_AUTH = range(3)
 PROCESS_PCODE, INIT_ADD, PROCESS_SUPPLIER, PROCESS_PNAME, PROCESS_CATEGORY, PROCESS_PIECES, SAVE_EDIT, ASK_REWRITE = range(8)
 CONV_END = -1 #value of ConversationHandler.END
+ask_register = f"Per poter utilizzare il bot è necessario richiedere l'OTP di accesso relativo alla tua licenza all'amministratore. Quando lo avrai ricevuto, utilizza il comando /registrami per registrarti."
+welcome = f"Lancia un comando per iniziare.\n\n<b>Comandi disponibili:</b>"+\
+                f"\n- /start - Scelta magazzino"+\
+                f"\n- /prodotto - Inserisci un nuovo prodotto o aggiorna le informazioni"+\
+                f"\n- /esci - Annulla l'operazione corrente"+\
+                f"\n- /registrami - Registra una nuova autorizzazione"
 
-#START:
+#"/start":
+#start - 1) check & get user auth:
 def start(update: Update, context: CallbackContext) -> int:
     chat_id = update.effective_chat.id
-    nome, auths = db_interactor.get_auths(chat_id)
+    tlog.info(f"/start launched by user: {chat_id}")
+    #check user authorizations:
+    msg = f"Autenticazione in corso..."
+    message = context.bot.send_message(chat_id=chat_id, text=msg)
+    auths = db_interactor.get_auths(chat_id)
+    #a) no auths -> user must launch "/registrami" command:
     if auths == []:
-        context.user_data['schema'] = SCHEMA
-        msg = f"Ciao! Benvenuto nel mio magazzino di <b>{SCHEMA}</b>.\nIl tuo chat id è: {chat_id}. Per richiedere autorizzazioni diverse potrai inviare questo codice all'amministratore.\n\nLancia un comando per iniziare!"
-        update.message.reply_text(msg, parse_mode=ParseMode.HTML)
+        msg = f"Benvenuto! Non conosco il tuo chat ID.\n\n{ask_register}"
+        tlog.info(f"New tentative user: {chat_id}")
+        message.edit_text(msg)
         return CONV_END
+    #b) store authorization for chosen WH:
     elif len(auths) == 1:
         schema = auths[0]
+        tlog.info(schema)
         context.user_data['schema'] = schema
-        msg = f"Ciao {nome.capitalize()}! Benvenuto nel mio magazzino di <b>{schema}</b>.\nIl tuo chat id è: {chat_id}.\n\nLancia un comando per iniziare!"
-        update.message.reply_text(msg, parse_mode=ParseMode.HTML)
+        msg = f"Ciao! Benvenuto nel mio magazzino di <b>{schema}</b>.\n{welcome}"
+        message.edit_text(msg, parse_mode=ParseMode.HTML)
         return CONV_END
     else:
         keyboard = []
         for auth in auths:
-            msg = f"Ciao {nome.capitalize()}! Su quale magazzino vuoi operare?"
             keyboard.append([InlineKeyboardButton(auth, callback_data=auth)])
-            context.bot.send_message(chat_id=update.effective_chat.id, text=msg)
-            return PICK_WH
+        msg = f"Ciao! Su quale magazzino vuoi operare?"
+        message.edit_text(msg, reply_markup=InlineKeyboardMarkup(keyboard))
+        return PICK_WH
 
+#start - 2) if more auths -> pick a warehouse:
 def pick_wh(update: Update, context: CallbackContext) -> int:
-    #get open query:
+    #get pick from open query:
     query = update.callback_query
     schema = query.data
     tlog.info(schema)
-    query.edit_message_reply_markup(reply_markup=None)
+    query.delete_message()
     query.answer()
     context.user_data['schema'] = schema
-    chat_id = update.effective_chat.id
-    msg = f"Benvenuto nel mio magazzino di <b>{schema}</b>.\nIl tuo chat id è: {chat_id}.\n\nLancia un comando per iniziare!"
+    msg = f"Ciao! Benvenuto nel mio magazzino di <b>{schema}</b>.\n{welcome}"
     context.bot.send_message(chat_id=update.effective_chat.id, text=msg, parse_mode=ParseMode.HTML)
     return CONV_END
 
-def help(update, context):
-    """Send a message when the command /help is issued."""
-    update.message.reply_text('Help!')
 
-def echo(update, context):
-    """Echo the user message."""
-    update.message.reply_text(update.message.text)
+#"/registrami":
+#registrami - 1) ask OTP:
+def registrami(update: Update, context: CallbackContext):
+    #reset:
+    # end_open_query(update, context)
+    # remove_open_keyboards(update, context)
+    chat_id = update.effective_chat.id
+    #asks user to send the OTP:
+    msg = f"Inviami l'OTP di accesso al tuo magazzino. Se non hai l'OTP, richiedilo all'amministratore."
+    context.bot.send_message(chat_id=chat_id, text=msg)
+    return SET_AUTH
 
-def error(update, context):
-    """Log Errors caused by Updates."""
-    tlog.warning('Update "%s" caused error "%s"', update, context.error)
+#2) match OTP with related License in DB: if found, register auth for the user:
+def set_auth(update: Update, context: CallbackContext):
+    chat_id = update.effective_chat.id
+    #get received OTP:
+    otp = update.message.text
+    context.bot.delete_message(chat_id=chat_id, message_id=update.message.message_id)
+    msg = f"OTP ricevuto. Verifica in corso..."
+    message = context.bot.send_message(chat_id=chat_id, text=msg)
+    #match OTP with Schemi list:
+    schema = db_interactor.register_auth(chat_id, otp)
+    #a) no match -> conv_end:
+    if schema == -1:
+        msg = f"Non ho riconosciuto l'OTP.\n\n{ask_register}"
+        message.edit_text(msg)
+        return CONV_END
+    else:
+        #b) match found -> launch "/start":
+        context.user_data['schema'] = schema
+        msg = f"Ciao! Benvenuto nel mio magazzino di <b>{schema}</b>.\n{welcome}"
+        message.edit_text(msg, parse_mode=ParseMode.HTML)
+        return CONV_END
+
+
+#HELPER: get previously chosen Schema (from "/start") or get Schema(s) from auths:
+def get_schema(update, context):
+    schema = context.user_data.get('schema')
+    #if "/start" not launched yet:
+    if schema == None:
+        #get auths from DB:
+        #check user authorizations:
+        chat_id = update.effective_chat.id
+        msg = f"Autenticazione in corso..."
+        message = context.bot.send_message(chat_id=chat_id, text=msg)
+        auths = db_interactor.get_auths(chat_id)
+        #a) no auths:
+        if auths == []:
+            msg = "Non ho trovato autorizzazioni. Lancia il comando /start per verificare le tue autorizzazioni."
+            message.edit_text(msg)
+            return None
+        #b) one auth only:
+        elif len(auths) == 1:
+            schema = auths[0]
+            context.user_data['schema'] = schema
+            tlog.info(f"Got schema: {schema}")
+            context.bot.delete_message(chat_id=update.effective_chat.id, message_id=message.message_id)
+            return schema
+        #c) more auths (note: admin only, not for normal users):
+        else:
+            msg = "Ho trovato più di un'autorizzazione: lancia il comando /start per scegliere su quale magazzino operare."
+            message.edit_text(msg)
+            return None
+    else:
+        tlog.info(f"Schema: {schema}")
+        return schema
+
 
 #ADD NEW PRODUCT TO DB:
 #1) ask p_code mode: text or photo:
 def prodotto(update: Update, context: CallbackContext) -> int:
-    msg = f"Ciao! Per iniziare, mi serve un <b>codice a barre</b>. Puoi:\n"+\
+    #get Schema:
+    schema = get_schema(update, context)
+    if schema == None:
+        return CONV_END
+    msg = f"Ciao! Sei nel magazzino <b>{schema}</b>.\n\nPer iniziare, mi serve un <b>codice a barre</b>. Puoi:\n"+\
             f"- Inviarmi una <b>FOTO</b> del codice, oppure\n"+\
             f"- Trascrivermelo via <b>TESTO</b> (SENZA spazi)."
     context.bot.send_message(chat_id=update.effective_chat.id, text=msg,
@@ -74,7 +149,7 @@ def prodotto(update: Update, context: CallbackContext) -> int:
 #3) process p_code:
 def process_pcode(update: Update, context: CallbackContext) -> int:
     p_code = None
-    schema = context.user_data.get('schema', SCHEMA)
+    schema = context.user_data.get('schema')
     msg = f"Sto estraendo i dati..."
     message = context.bot.send_message(chat_id=update.effective_chat.id, text=msg)
     #1) check if message sent by usercontains a photo:
@@ -106,7 +181,7 @@ def process_pcode(update: Update, context: CallbackContext) -> int:
     try:
         conn, cursor = db_connect()
         Prodotto = db_interactor.get_product(conn, schema, p_code)
-        conn.close()
+        db_disconnect(conn, cursor)
         #a) if product not found -> new product:
         if Prodotto.empty == True:
             context.user_data['in_db'] = False
@@ -160,7 +235,7 @@ def init_add(update: Update, context: CallbackContext) -> int:
         context.bot.send_message(chat_id=update.effective_chat.id, text=msg)
         return CONV_END
     else:
-        schema = context.user_data.get('schema', SCHEMA)
+        schema = context.user_data.get('schema')
         #supplier picker:
         keyboard = bot_functions.inline_picker(schema, 'Produttore')
         msg = f"Iniziamo. Dimmi il nome del <b>produttore</b>.\n\nOppure scrivi /esci per uscire."
@@ -213,7 +288,7 @@ def process_pname(update: Update, context: CallbackContext) -> int:
     #next message:
     msg = f"Segnato nome {p_name}! Ora dimmi a quale <b>categoria</b> appartiene (es. cosmesi, alimentazione, ...).\n\nOppure scrivi /esci per uscire."
     #category picker:
-    schema = context.user_data.get('schema', SCHEMA)
+    schema = context.user_data.get('schema')
     keyboard = bot_functions.inline_picker(schema, 'Categoria')
     update.message.reply_text(msg, 
         parse_mode=ParseMode.HTML, 
@@ -314,7 +389,7 @@ def save_to_db(update: Update, context: CallbackContext) -> int:
 
     #trigger STORE TO DB:
     if choice == 'Sì':
-        schema = context.user_data.get('schema', SCHEMA)
+        schema = context.user_data.get('schema')
         p_code = int(context.user_data['p_code'])
         utts = {
             'p_code': p_code,
@@ -328,7 +403,7 @@ def save_to_db(update: Update, context: CallbackContext) -> int:
             if context.user_data.get('in_db') == True:
                 ret = db_interactor.delete_prod(conn, cursor, schema, p_code)
             ret = db_interactor.add_prod(conn, cursor, schema, utts)
-            conn.close()
+            db_disconnect(conn, cursor)
         except:
             err = True
         
@@ -391,20 +466,17 @@ def ask_rewrite(update: Update, context: CallbackContext) -> int:
     context.bot.send_message(chat_id=update.effective_chat.id, text=msg, parse_mode=ParseMode.HTML)
     return PROCESS_PIECES
 
-#CANCEL AND END:
-def esci(update: Update, context: CallbackContext) -> int:
-    msg = "Uscito. A presto!"
-    update.message.reply_text(msg)
-    return CONV_END
-
 
 #GET DB VIEW IN PDF:
 def prodotti(update: Update, context: CallbackContext) -> int:
+    #get Schema:
+    schema = get_schema(update, context)
+    if schema == None:
+        return CONV_END
     # try:
     conn, cursor = db_connect()
-    schema = context.user_data.get('schema', SCHEMA)
     Prodotti = db_interactor.get_view_prodotti(conn, schema)
-    conn.close()
+    db_disconnect(conn, cursor)
     if Prodotti.empty == False:
         #build plt table:
         fig, ax =plt.subplots(figsize=(12,4))
@@ -426,6 +498,26 @@ def prodotti(update: Update, context: CallbackContext) -> int:
     #     update.message.reply_text(msg)
 
 
+#GENERIC HANDLERS:
+#default reply:
+def default_reply(update, context):
+    update.message.reply_text(welcome, parse_mode=ParseMode.HTML)
+
+#cancel and end:
+def esci(update: Update, context: CallbackContext) -> int:
+    msg = "Uscito. A presto!"
+    update.message.reply_text(msg)
+    return CONV_END
+
+#error handler: log errors caused by updates:
+def error(update, context):
+    tlog.exception(f"{Exception}")
+    #tlog.warning('Update "%s" caused error "%s"', update, context.error)
+    msg = f"C'è stato un problema, ti chiedo scusa!"
+    context.bot.send_message(chat_id=update.effective_chat.id, text=msg)
+    return CONV_END
+
+
 #MAIN:
 def main() -> None:
     #create the Updater and pass it the bot's token:
@@ -434,20 +526,26 @@ def main() -> None:
     dispatcher = updater.dispatcher
 
     #command handlers:
-    dispatcher.add_handler(CommandHandler("start", start))
-    dispatcher.add_handler(CommandHandler("help", help))
-    #dispatcher.add_handler(CommandHandler("prodotti", prodotti))
+    #dispatcher.add_handler(CommandHandler("viste", viste))
 
     #conversation handlers:
-    #start & login ("/start"):
+    #/start":
     conv_handler = ConversationHandler(
-        entry_points=[
-                CommandHandler('start', start),
-                MessageHandler(Filters.regex("^(Magazzino|Scegli|Login)$"), start)],
+        entry_points=[CommandHandler('start', start)],
         states={
             PICK_WH: [CallbackQueryHandler(pick_wh, pattern='.*')],
         },
         fallbacks=[CommandHandler('error', error)])
+    dispatcher.add_handler(conv_handler)
+
+    #/registrami:
+    conv_handler = ConversationHandler(
+        entry_points=[CommandHandler('registrami', registrami)],
+        states={
+            SET_AUTH: [MessageHandler(Filters.regex(r'\d+'), set_auth)],
+        },
+        fallbacks=[CommandHandler('error', error)],
+        allow_reentry=True)
     dispatcher.add_handler(conv_handler)
 
     #add new product ("/nuovo"):
@@ -456,28 +554,41 @@ def main() -> None:
                 CommandHandler('prodotto', prodotto),
                 MessageHandler(Filters.regex("^(Prodotto|prodotto)$"), prodotto)],
         states={
-            PROCESS_PCODE: [MessageHandler(Filters.photo, process_pcode),
+            PROCESS_PCODE: [
+                CommandHandler('esci', esci),
+                MessageHandler(Filters.photo, process_pcode),
                 MessageHandler(Filters.text, process_pcode)],
-            INIT_ADD: [CallbackQueryHandler(init_add, pattern='.*')],
+            INIT_ADD: [
+                CommandHandler('esci', esci),
+                CallbackQueryHandler(init_add, pattern='.*')],
             PROCESS_SUPPLIER: [
+                CommandHandler('esci', esci),
                 CallbackQueryHandler(new_supplier, pattern='^NUOVO$'),
                 CallbackQueryHandler(process_supplier, pattern='.*'),
                 MessageHandler(Filters.text, process_supplier)],
             PROCESS_PNAME: [
+                CommandHandler('esci', esci),
                 MessageHandler(Filters.text, process_pname)],
             PROCESS_CATEGORY: [
+                CommandHandler('esci', esci),
                 CallbackQueryHandler(new_category, pattern='^NUOVO$'),
                 CallbackQueryHandler(process_category, pattern='.*'),
                 MessageHandler(Filters.text, process_category)],
-            PROCESS_PIECES: [MessageHandler(Filters.text, process_pieces)],
-            SAVE_EDIT: [CallbackQueryHandler(save_to_db, pattern='.*')],
-            ASK_REWRITE: [CallbackQueryHandler(ask_rewrite, pattern='.*')],
+            PROCESS_PIECES: [
+                CommandHandler('esci', esci),
+                MessageHandler(Filters.text, process_pieces)],
+            SAVE_EDIT: [
+                CommandHandler('esci', esci),
+                CallbackQueryHandler(save_to_db, pattern='.*')],
+            ASK_REWRITE: [
+                CommandHandler('esci', esci),
+                CallbackQueryHandler(ask_rewrite, pattern='.*')],
         },
         fallbacks=[CommandHandler('error', error)])
     dispatcher.add_handler(conv_handler)
 
     #message handlers:
-    dispatcher.add_handler(MessageHandler(Filters.text, echo))
+    dispatcher.add_handler(MessageHandler(Filters.text, default_reply))
 
     #log all errors:
     dispatcher.add_error_handler(error)

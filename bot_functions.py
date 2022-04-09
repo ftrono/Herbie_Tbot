@@ -1,7 +1,7 @@
 from telegram import Update, ParseMode, InlineKeyboardButton, InlineKeyboardMarkup
 from pyzbar import pyzbar
 from PIL import Image
-from database.db_tools import db_connect
+from database.db_tools import db_connect, db_disconnect
 import database.db_interactor as db_interactor
 from globals import *
 

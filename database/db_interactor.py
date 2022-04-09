@@ -1,10 +1,12 @@
 from globals import *
-from database.db_tools import db_connect
+from database.db_tools import db_connect, db_disconnect
 
 #DB_INTERACTOR:
 #Low-level DB interfaces:
+# - get_auths()
+# - register_auth()
 # - get_column()
-# - get_prodinfo()
+# - get_product()
 # - add_prod()
 # - delete_prod()
 # - get_view_prodotti()
@@ -14,20 +16,36 @@ from database.db_tools import db_connect
 def get_auths(chat_id):
     try:
         conn, cursor = db_connect()
-        query = f"SELECT nomeutente, autorizzazione FROM utenti WHERE chatid = {int(chat_id)}"
+        query = f"SELECT nomeschema FROM utenti WHERE chatid = {int(chat_id)}"
         auths = pd.read_sql(query, conn)
-        #select only first word in name:
-        nome = auths['nomeutente'].iloc[0]
-        nome = nome.split()
-        nome = nome[0]
-        #list of auths:
-        auths = auths['autorizzazione'].to_list()
-        conn.close()
+        auths = auths['nomeschema'].unique().tolist()
+        db_disconnect(conn, cursor)
     except:
-        nome = ""
         auths = []
-        log.error(f"DB query error for Utenti.")
-    return nome, auths
+        dlog.error(f"DB query error for Utenti.")
+    return auths
+
+
+#register new user authorization:
+def register_auth(chat_id, otp):
+    try:
+        conn, cursor = db_connect()
+        #1) query for Schema corresponding to the OTP:
+        query = f"SELECT nomeschema FROM schemi WHERE hashotp = sha224('{otp}')"
+        match = pd.read_sql(query, conn)
+        #2) register user auth for the Schema:
+        if match.empty == False:
+            schema = match['nomeschema'].iloc[0]
+            query = f"INSERT INTO utenti (ChatID, nomeschema) VALUES ({chat_id}, '{schema}')"
+            dlog.info(f"Added authorization for user {chat_id} to Schema: {schema}")
+            cursor.execute(query)
+            conn.commit()
+        db_disconnect(conn, cursor)
+        return schema
+    except Exception as e:
+        dlog.error(f"DB query error in registering user {chat_id}. {e}")
+        return -1
+
 
 #get all items in a column of Prodotti table:
 def get_column(schema, column_name):
@@ -36,10 +54,10 @@ def get_column(schema, column_name):
         query = f"SELECT DISTINCT {column_name} FROM {schema}.prodotti"
         items = pd.read_sql(query, conn)
         items = items[column_name].to_list()
-        conn.close()
+        db_disconnect(conn, cursor)
     except:
         items = []
-        log.error(f"DB query error for all '{column_name}' items.")
+        dlog.error(f"DB query error for all '{column_name}' items.")
     return items
 
 
@@ -51,7 +69,7 @@ def get_product(conn, schema, p_code):
         query = f"SELECT codiceprod, produttore, nome, categoria, quantita FROM {schema}.prodotti WHERE codiceprod = {p_code}"
         Prodotto = pd.read_sql(query, conn)
     except psycopg2.Error as e:
-        log.error(f"DB query error for 'p_code'. {e}")
+        dlog.error(f"DB query error for 'p_code'. {e}")
     return Prodotto
 
 
@@ -61,10 +79,10 @@ def add_prod(conn, cursor, schema, info):
         query = f"INSERT INTO {schema}.prodotti (codiceprod, produttore, nome, categoria, quantita) VALUES ({info['p_code']}, '{info['supplier']}', '{info['p_name']}', '{info['category']}', {info['pieces']})"
         cursor.execute(query)
         conn.commit()
-        log.info(f"Added product {info['p_code']} to table prodotti.")
+        dlog.info(f"Added product {info['p_code']} to table prodotti.")
         return 0
     except psycopg2.Error as e:
-        log.error(f"Unable to add product {info['p_code']} to table prodotti. {e}")
+        dlog.error(f"Unable to add product {info['p_code']} to table prodotti. {e}")
         return -1
 
 
@@ -74,10 +92,10 @@ def delete_prod(conn, cursor, schema, p_code):
         query = f"DELETE FROM {schema}.prodotti WHERE codiceprod = {p_code}"
         cursor.execute(query)
         conn.commit()
-        log.info(f"Deleted product {p_code} from DB.")
+        dlog.info(f"Deleted product {p_code} from DB.")
         return 0
     except psycopg2.Error as e:
-        log.error(f"Unable to delete product {p_code} from DB. {e}")
+        dlog.error(f"Unable to delete product {p_code} from DB. {e}")
         return -1
 
 
@@ -91,6 +109,6 @@ def get_view_prodotti(conn, schema, supplier=None):
         query = f"SELECT * FROM {schema}.prodotti{suppstr}"
         FullList = pd.read_sql(query, conn)
     except psycopg2.Error as e:
-        log.error(f"Unable to perform get_suggestion_list for supplier {supplier}. {e}")
+        dlog.error(f"Unable to perform get_suggestion_list for supplier {supplier}. {e}")
     return FullList
 

@@ -28,11 +28,11 @@ except:
 
 #LOGS:
 #Set DB logger:
-log=logging.getLogger('db_events')
+dlog=logging.getLogger('db_events')
 hdl=logging.FileHandler('./logs/db_events.log',mode='a')
 hdl.setFormatter(logging.Formatter('%(asctime)s %(levelname)s %(message)s'))
-log.setLevel(logging.INFO)
-log.addHandler(hdl)
+dlog.setLevel(logging.INFO)
+dlog.addHandler(hdl)
 
 #Set Telegram bot logger:
 tlog=logging.getLogger('tbot_events')

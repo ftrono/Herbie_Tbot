@@ -2,9 +2,11 @@ from globals import *
 
 #DB TOOLS (BASICS):
 # - db_connect()
-# - create_tables()
-# - drop_all()
+# - create_dbo_tables()
+# - create_schema_tables()
 # - empty_table()
+# - drop_table()
+# - drop_schema()
 
 
 #open DB connection:
@@ -13,22 +15,49 @@ def db_connect():
         conn = psycopg2.connect(DATABASE_URL, sslmode='require')
         cursor = conn.cursor()
     except psycopg2.Error as e:
-        log.error(e)
+        dlog.error(e)
     return conn, cursor
 
+#close DB connection:
+def db_disconnect(conn, cursor):
+    try:
+        cursor.close()
+        conn.close()
+    except psycopg2.Error as e:
+        dlog.error(e)
 
-#create tables:
-def create_tables(conn, cursor, schema):
+#create dbo tables:
+def create_dbo_tables(conn, cursor):
     #dict of queries:
     queries = {
-        'Utenti': f'''CREATE TABLE Utenti (
-            ID SERIAL NOT NULL,
-            ChatID VARCHAR(20) NOT NULL,
-            NomeUtente TEXT NOT NULL,
-            Autorizzazione VARCHAR(20) NOT NULL,
-            PRIMARY KEY (ID)
+        'Schemi': f'''CREATE TABLE Schemi (
+            NomeSchema VARCHAR(20) UNIQUE NOT NULL,
+            HashOTP BYTEA NOT NULL,
+            PRIMARY KEY (NomeSchema)
             )''',
 
+        'Utenti': f'''CREATE TABLE Utenti (
+            ID SERIAL NOT NULL,
+            ChatID BIGINT NOT NULL,
+            NomeSchema VARCHAR(20) NOT NULL,
+            PRIMARY KEY (ID),
+            FOREIGN KEY (NomeSchema) REFERENCES Schemi (NomeSchema) ON DELETE CASCADE ON UPDATE CASCADE
+            )'''}
+
+    #create:  
+    for t in queries.keys():
+        try:
+            cursor.execute(queries[t])
+            conn.commit()
+            dlog.info(f"Created table {t}.")
+        except psycopg2.Error as e:
+            dlog.error(f"Unable to create table {t}. {e}")
+    return 0
+
+#create tables:
+def create_schema_tables(conn, cursor, schema):
+    #dict of queries:
+    queries = {
         'Produttori': f'''CREATE TABLE {schema}.Produttori (
             Produttore VARCHAR(50) NOT NULL,
             ScontoMedio SMALLINT NOT NULL DEFAULT 0,
@@ -61,7 +90,7 @@ def create_tables(conn, cursor, schema):
             )''',
         
         'StoricoOrdini': f'''CREATE TABLE {schema}.StoricoOrdini (
-            CodiceOrd VARCHAR(10) NOT NULL,
+            CodiceOrd BIGINT NOT NULL,
             Produttore VARCHAR(50) NOT NULL,
             Riferimento TEXT,
             DataModifica VARCHAR(10) NOT NULL,
@@ -72,7 +101,7 @@ def create_tables(conn, cursor, schema):
             
         'ListeOrdini': f'''CREATE TABLE {schema}.ListeOrdini (
             ID SERIAL NOT NULL,
-            CodiceOrd VARCHAR(10) NOT NULL, 
+            CodiceOrd BIGINT NOT NULL, 
             CodiceProd BIGINT NOT NULL,
             Quantita SMALLINT NOT NULL DEFAULT 1,
             PRIMARY KEY (ID),
@@ -85,62 +114,55 @@ def create_tables(conn, cursor, schema):
     try:
         cursor.execute(f"CREATE SCHEMA {schema}")
         conn.commit()
-        log.info(f"Created schema {schema}.")
+        dlog.info(f"Created schema {schema}.")
     except psycopg2.Error as e:
-        log.error(f"Unable to create schema {schema}. {e}")
+        dlog.error(f"Unable to create schema {schema}. {e}")
         return -1
 
+    #2) create tables for the schema:
     for t in queries.keys():
         try:
             cursor.execute(queries[t])
             conn.commit()
-            log.info(f"Created table {t}.")
+            dlog.info(f"Created table {schema}.{t}.")
         except psycopg2.Error as e:
-            log.error(f"Unable to create table {t}. {e}")
+            dlog.error(f"Unable to create table {schema}.{t}. {e}")
     return 0
-
-
-#drop all tables in the schema (in globals):
-def drop_all(conn, cursor, schema):
-    try:
-        query = f"DROP SCHEMA {schema} CASCADE"
-        cursor.execute(query)
-        conn.commit()
-        log.info(f"Dropped schema {schema}.")
-        return 0
-    except psycopg2.Error as e:
-        log.error(f"Unable to drop schema {schema}.")
-        return -1
-
 
 #empty a specific table:
 def empty_table(conn, cursor, tablename, schema=None):
-    if schema:
-        loc = f"{schema}."
-    else:
-        loc = ""
+    loc = f"{schema}." if schema else ""
     try:
         query = f"DELETE FROM {loc}{tablename}"
         cursor.execute(query)
         conn.commit()
-        log.info(f"Table {loc}{tablename} successfully reset.")
+        dlog.info(f"Table {loc}{tablename} successfully reset.")
         return 0
     except psycopg2.Error as e:
-        log.error(f"ERROR: unable to reset {loc}{tablename} table.")
+        dlog.error(f"ERROR: unable to reset {loc}{tablename} table.")
         return -1
 
 #drop a specific table:
 def drop_table(conn, cursor, tablename, schema=None):
-    if schema:
-        loc = f"{schema}."
-    else:
-        loc = ""
+    loc = f"{schema}." if schema else ""
     try:
         query = f"DROP TABLE {loc}{tablename}"
         cursor.execute(query)
         conn.commit()
-        log.info(f"Dropped table {loc}{tablename}.")
+        dlog.info(f"Dropped table {loc}{tablename}.")
         return 0
     except psycopg2.Error as e:
-        log.error(f"Unable to drop table {loc}{tablename}.")
+        dlog.error(f"Unable to drop table {loc}{tablename}.")
+        return -1
+
+#drop all tables in a schema:
+def drop_schema(conn, cursor, schema):
+    try:
+        query = f"DROP SCHEMA {schema} CASCADE"
+        cursor.execute(query)
+        conn.commit()
+        dlog.info(f"Dropped schema {schema}.")
+        return 0
+    except psycopg2.Error as e:
+        dlog.error(f"Unable to drop schema {schema}.")
         return -1
