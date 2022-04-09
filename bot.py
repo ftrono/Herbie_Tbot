@@ -8,14 +8,22 @@ from matplotlib.backends.backend_pdf import PdfPages
 from globals import *
 
 #HERBIE TELEGRAM BOT
+
 #GLOBALS:
+#conversation states:
 START, PICK_WH, SET_AUTH = range(3)
+ASK_DISCOUNT, SAVE_SUPPLIER = range(2)
+ASK_ALIQUOTA, SAVE_CATEGORY = range(2)
 PROCESS_PCODE, INIT_ADD, PROCESS_SUPPLIER, PROCESS_PNAME, PROCESS_CATEGORY, PROCESS_PIECES, SAVE_EDIT, ASK_REWRITE = range(8)
 CONV_END = -1 #value of ConversationHandler.END
+
+#default messages:
 ask_register = f"Per poter utilizzare il bot è necessario richiedere l'OTP di accesso relativo alla tua licenza all'amministratore. Quando lo avrai ricevuto, utilizza il comando /registrami per registrarti."
 welcome = f"Lancia un comando per iniziare.\n\n<b>Comandi disponibili:</b>"+\
                 f"\n- /start - Scelta magazzino"+\
                 f"\n- /prodotto - Inserisci un nuovo prodotto o aggiorna le informazioni"+\
+                f"\n- /produttore - Registra un nuovo produttore o aggiornane lo sconto medio sugli ordini"+\
+                f"\n- /categoria - Registra una nuova categoria prodotti o aggiornane l'aliquota IVA applicabile"+\
                 f"\n- /esci - Annulla l'operazione corrente"+\
                 f"\n- /registrami - Registra una nuova autorizzazione"
 
@@ -35,6 +43,7 @@ def remove_open_keyboards(update: Update, context: CallbackContext):
         pass
 
 
+#COMMANDS & HELPERS:
 #"/start":
 #start - 1) check & get user auth:
 def start(update: Update, context: CallbackContext) -> int:
@@ -156,8 +165,8 @@ def get_schema(update: Update, context: CallbackContext) -> int:
         return schema
 
 
-#ADD NEW PRODUCT TO DB:
-#1) ask p_code mode: text or photo:
+#"/prodotto":
+#prodotto - 1) ask p_code mode: text or photo:
 def prodotto(update: Update, context: CallbackContext) -> int:
     #reset:
     end_open_query(update, context)
@@ -174,7 +183,7 @@ def prodotto(update: Update, context: CallbackContext) -> int:
     context.user_data["last_sent"] = message.message_id
     return PROCESS_PCODE
 
-#3) process p_code:
+#prodotto - 2) process p_code:
 def process_pcode(update: Update, context: CallbackContext) -> int:
     p_code = None
     schema = context.user_data.get('schema')
@@ -416,7 +425,7 @@ def process_pieces(update: Update, context: CallbackContext) -> int:
     return SAVE_EDIT
 
 
-#6) process category and ask_quantity:
+#prodotto - 6) process category and ask_quantity:
 def save_to_db(update: Update, context: CallbackContext) -> int:
     #get open query:
     query = update.callback_query
@@ -487,6 +496,7 @@ def save_to_db(update: Update, context: CallbackContext) -> int:
         context.user_data["last_sent"] = message.message_id
         return ASK_REWRITE
 
+#EDIT:
 def ask_rewrite(update: Update, context: CallbackContext) -> int:
     #get open query:
     query = update.callback_query
@@ -513,8 +523,114 @@ def ask_rewrite(update: Update, context: CallbackContext) -> int:
     return PROCESS_PIECES
 
 
-#GET DB VIEW IN PDF:
-def prodotti(update: Update, context: CallbackContext):
+#"/produttore":
+#produttore - 1) ask name of new supplier:
+def produttore(update: Update, context: CallbackContext) -> int:
+    #reset:
+    end_open_query(update, context)
+    remove_open_keyboards(update, context)
+    #get Schema:
+    schema = get_schema(update, context)
+    if schema == None:
+        return CONV_END
+    msg = f"Ciao! Registriamo un nuovo produttore, o aggiorniamone lo sconto medio sugli ordini, nel magazzino <b>{schema}</b>.\n\n"+\
+            f"Inviami il nome del produttore. Oppure clicca su /esci per uscire."
+    message = context.bot.send_message(chat_id=update.effective_chat.id, text=msg,
+        parse_mode=ParseMode.HTML)
+    context.user_data["last_sent"] = message.message_id
+    return ASK_DISCOUNT
+
+#produttore - 2) ask typical discount on orders from supplier:
+def ask_discount(update: Update, context: CallbackContext):
+    #store supplier from user message:
+    supplier = update.message.text.lower()
+    context.user_data['supplier'] = supplier
+    #ask discount:
+    msg = f"Ricevuto! Ora scrivimi la percentuale di sconto sugli ordini applicata in media da {supplier} (es. 30%).\n\nOppure clicca su /esci per uscire."
+    message = context.bot.send_message(chat_id=update.effective_chat.id, text=msg)
+    context.user_data["last_sent"] = message.message_id
+    return SAVE_SUPPLIER
+
+#produttore - 3) save new supplier and its typical discount rate on orders:
+def save_supplier(update: Update, context: CallbackContext) -> int:
+    #store average discount from user message:
+    discount = update.message.text.strip('%')
+    discount = discount.replace(',', '.')
+    try:
+        discount = int(discount)
+    except:
+        msg = "Re-inviami soltanto la percentuale in cifre (es. 30%).\n\nOppure clicca su /esci per uscire."
+        update.message.reply_text(msg)
+        return SAVE_SUPPLIER
+
+    #save new data to DB:
+    supplier = context.user_data['supplier']
+    schema = context.user_data['schema']
+    ret = db_interactor.add_supplier(schema, supplier, discount)
+    if ret == 0:
+        msg = f"Fatto! Ti ho salvato produttore {supplier} e relativo sconto medio {discount}% nel magazzino {schema}."
+    if ret == -1:
+        msg = f"C'è stato un problema col mio DB, ti chiedo scusa!"
+    message = context.bot.send_message(chat_id=update.effective_chat.id, text=msg)
+    context.user_data["last_sent"] = message.message_id
+    return CONV_END
+
+
+#"/categoria":
+#categoria - 1) ask name of new supplier:
+def categoria(update: Update, context: CallbackContext) -> int:
+    #reset:
+    end_open_query(update, context)
+    remove_open_keyboards(update, context)
+    #get Schema:
+    schema = get_schema(update, context)
+    if schema == None:
+        return CONV_END
+    msg = f"Ciao! Registriamo una nuova categoria prodotti, o aggiorniamone l'aliquota IVA, nel magazzino <b>{schema}</b>.\n\n"+\
+            f"Inviami il nome della categoria. Oppure clicca su /esci per uscire."
+    message = context.bot.send_message(chat_id=update.effective_chat.id, text=msg,
+        parse_mode=ParseMode.HTML)
+    context.user_data["last_sent"] = message.message_id
+    return ASK_ALIQUOTA
+
+#categoria - 2) ask typical discount on orders from supplier:
+def ask_aliquota(update: Update, context: CallbackContext):
+    #store supplier from user message:
+    category = update.message.text.lower()
+    context.user_data['category'] = category
+    #ask discount:
+    msg = f"Ricevuta! Ora scrivimi l'aliquota IVA applicabile alla categoria {category} (es. 10%).\n\nOppure clicca su /esci per uscire."
+    message = context.bot.send_message(chat_id=update.effective_chat.id, text=msg)
+    context.user_data["last_sent"] = message.message_id
+    return SAVE_CATEGORY
+
+#categoria - 3) save new supplier and its typical discount rate on orders:
+def save_category(update: Update, context: CallbackContext) -> int:
+    #store average discount from user message:
+    vat = update.message.text.strip('%')
+    vat = vat.replace(',', '.')
+    try:
+        vat = float(vat)
+    except:
+        msg = "Re-inviami soltanto l'aliquota in cifre (es. 10%).\n\nOppure clicca su /esci per uscire."
+        update.message.reply_text(msg)
+        return SAVE_CATEGORY
+
+    #save new data to DB:
+    category = context.user_data['category']
+    schema = context.user_data['schema']
+    ret = db_interactor.add_category(schema, category, vat)
+    if ret == 0:
+        msg = f"Fatto! Ti ho salvato categoria {category} e relativa aliquota IVA applicabile {vat}% nel magazzino {schema}."
+    if ret == -1:
+        msg = f"C'è stato un problema col mio DB, ti chiedo scusa!"
+    message = context.bot.send_message(chat_id=update.effective_chat.id, text=msg)
+    context.user_data["last_sent"] = message.message_id
+    return CONV_END
+
+
+#"viste":
+def viste(update: Update, context: CallbackContext):
     #reset:
     end_open_query(update, context)
     remove_open_keyboards(update, context)
@@ -560,7 +676,7 @@ def esci(update: Update, context: CallbackContext) -> int:
     #reset:
     end_open_query(update, context)
     remove_open_keyboards(update, context)
-    msg = "Uscito. A presto!"
+    msg = "Esco. A presto!"
     update.message.reply_text(msg)
     return CONV_END
 
@@ -603,6 +719,36 @@ def main() -> None:
         entry_points=[CommandHandler('registrami', registrami)],
         states={
             SET_AUTH: [MessageHandler(Filters.regex(r'\d+'), set_auth)],
+        },
+        fallbacks=[CommandHandler('error', error)],
+        allow_reentry=True)
+    dispatcher.add_handler(conv_handler)
+
+    #/produttore":
+    conv_handler = ConversationHandler(
+        entry_points=[CommandHandler('produttore', produttore)],
+        states={
+            ASK_DISCOUNT: [
+                CommandHandler('esci', esci),
+                MessageHandler(Filters.text, ask_discount)],
+            SAVE_SUPPLIER: [
+                CommandHandler('esci', esci),
+                MessageHandler(Filters.text, save_supplier)],
+        },
+        fallbacks=[CommandHandler('error', error)],
+        allow_reentry=True)
+    dispatcher.add_handler(conv_handler)
+
+    #/categoria":
+    conv_handler = ConversationHandler(
+        entry_points=[CommandHandler('categoria', categoria)],
+        states={
+            ASK_ALIQUOTA: [
+                CommandHandler('esci', esci),
+                MessageHandler(Filters.text, ask_aliquota)],
+            SAVE_CATEGORY: [
+                CommandHandler('esci', esci),
+                MessageHandler(Filters.text, save_category)],
         },
         fallbacks=[CommandHandler('error', error)],
         allow_reentry=True)

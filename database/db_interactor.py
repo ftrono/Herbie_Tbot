@@ -98,6 +98,56 @@ def delete_prod(conn, cursor, schema, p_code):
         dlog.error(f"Unable to delete product {p_code} from DB. {e}")
         return -1
 
+#register a new supplier:
+def add_supplier(schema, supplier, discount):
+    try:
+        conn, cursor = db_connect()
+        #1) check if supplier already in DB:
+        query = f"SELECT produttore, scontomedio FROM {schema}.produttori WHERE produttore = '{supplier}'"
+        Match = pd.read_sql(query, conn)
+        if Match.empty == True:
+            #if not exists yet -> register supplier:
+            query = f"INSERT INTO {schema}.produttori (produttore, scontomedio) VALUES ('{supplier}', {discount})"
+            cursor.execute(query)
+            conn.commit()
+            dlog.info(f"Registered supplier {supplier}, discount {discount}%, to table {schema}.produttori.")
+        else:
+            #if already in DB -> update discount:
+            query = f"UPDATE {schema}.produttori SET scontomedio = {discount} WHERE produttore = '{supplier}'"
+            cursor.execute(query)
+            conn.commit()
+            dlog.info(f"Updated discount rate for supplier {supplier} to {discount}%, table {schema}.produttori.")
+            db_disconnect(conn, cursor)
+        return 0
+    except psycopg2.Error as e:
+        dlog.error(f"Unable to register supplier {supplier} and discount {discount}% to table {schema}.produttori. {e}")
+        return -1
+
+#register a new category:
+def add_category(schema, category, vat):
+    try:
+        conn, cursor = db_connect()
+        #1) check if category already in DB:
+        query = f"SELECT categoria, aliquota FROM {schema}.categorie WHERE categoria = '{category}'"
+        Match = pd.read_sql(query, conn)
+        if Match.empty == True:
+            #if not exists yet -> register category:
+            query = f"INSERT INTO {schema}.categorie (categoria, aliquota) VALUES ('{category}', {vat})"
+            cursor.execute(query)
+            conn.commit()
+            dlog.info(f"Registered category {category}, vat rate {vat}%, to table {schema}.categorie.")
+        else:
+            #if already in DB -> update vat rate:
+            query = f"UPDATE {schema}.categorie SET aliquota = {vat} WHERE categoria = '{category}'"
+            cursor.execute(query)
+            conn.commit()
+            dlog.info(f"Updated vat rate for category {category} to {vat}%, table {schema}.categorie.")
+            db_disconnect(conn, cursor)
+        return 0
+    except psycopg2.Error as e:
+        dlog.error(f"Unable to register category {category} and vat rate {vat} to table {schema}.categorie. {e}")
+        return -1
+
 
 #get list of products from DB:
 def get_view_prodotti(conn, schema, supplier=None):
