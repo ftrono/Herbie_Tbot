@@ -158,6 +158,8 @@ def drop_table(conn, cursor, tablename, schema=None):
 #drop all tables in a schema:
 def drop_schema(conn, cursor, schema):
     try:
+        query = f"DELETE FROM Schemi WHERE NomeSchema = 'Copertino'"
+        cursor.execute(query)
         query = f"DROP SCHEMA {schema} CASCADE"
         cursor.execute(query)
         conn.commit()

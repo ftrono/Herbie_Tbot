@@ -15,6 +15,7 @@ def extract_barcode(image):
     p_code = decoded[0].data
     p_code = p_code.decode("utf-8")
     os.remove(image_name)
+    p_code = int(p_code)
     return p_code
 
 #inline picker keyboard:
