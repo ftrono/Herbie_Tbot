@@ -47,17 +47,22 @@ def register_auth(chat_id, otp):
         return -1
 
 
-#get all items in a column of Prodotti table:
+#get all suppliers, categories or items in a column of the Prodotti table:
 def get_column(schema, column_name):
     try:
         conn, cursor = db_connect()
-        query = f"SELECT DISTINCT {column_name} FROM {schema}.prodotti"
+        if column_name == 'produttore':
+            query = f"SELECT produttore FROM {schema}.produttori"
+        elif column_name == 'categoria':
+            query = f"SELECT categoria FROM {schema}.categorie"
+        else:
+            query = f"SELECT DISTINCT {column_name} FROM {schema}.prodotti"
         items = pd.read_sql(query, conn)
         items = items[column_name].to_list()
         db_disconnect(conn, cursor)
     except:
         items = []
-        dlog.error(f"DB query error for all '{column_name}' items.")
+        dlog.error(f"DB query error for all '{column_name}' items for schema {schema}.")
     return items
 
 
@@ -69,7 +74,7 @@ def get_product(conn, schema, p_code):
         query = f"SELECT codiceprod, produttore, nome, categoria, quantita FROM {schema}.prodotti WHERE codiceprod = {p_code}"
         Prodotto = pd.read_sql(query, conn)
     except psycopg2.Error as e:
-        dlog.error(f"DB query error for 'p_code'. {e}")
+        dlog.error(f"DB query error for product {p_code} in table {schema}.prodotti. {e}")
     return Prodotto
 
 
@@ -79,10 +84,25 @@ def add_prod(conn, cursor, schema, info):
         query = f"INSERT INTO {schema}.prodotti (codiceprod, produttore, nome, categoria, quantita) VALUES ({info['p_code']}, '{info['supplier']}', '{info['p_name']}', '{info['category']}', {info['pieces']})"
         cursor.execute(query)
         conn.commit()
-        dlog.info(f"Added product {info['p_code']} to table prodotti.")
+        dlog.info(f"Added product {info['p_code']} to table {schema}.prodotti.")
         return 0
     except psycopg2.Error as e:
-        dlog.error(f"Unable to add product {info['p_code']} to table prodotti. {e}")
+        dlog.error(f"Unable to add product {info['p_code']} to table {schema}.prodotti. {e}")
+        return -1
+
+
+#add a detail info for a product:
+def add_detail(schema, p_code, colname, value):
+    try:
+        conn, cursor = db_connect()
+        query = f"UPDATE {schema}.prodotti SET {colname} = {value} WHERE codiceprod = {p_code}"
+        cursor.execute(query)
+        conn.commit()
+        dlog.info(f"Set {colname} = {value} for product {p_code} in table {schema}.prodotti.")
+        db_disconnect(conn, cursor)
+        return 0
+    except psycopg2.Error as e:
+        dlog.error(f"Unable to update detail for product {p_code} in table {schema}.prodotti. {e}")
         return -1
 
 
@@ -92,10 +112,10 @@ def delete_prod(conn, cursor, schema, p_code):
         query = f"DELETE FROM {schema}.prodotti WHERE codiceprod = {p_code}"
         cursor.execute(query)
         conn.commit()
-        dlog.info(f"Deleted product {p_code} from DB.")
+        dlog.info(f"Deleted product {p_code} from table {schema}.prodotti.")
         return 0
     except psycopg2.Error as e:
-        dlog.error(f"Unable to delete product {p_code} from DB. {e}")
+        dlog.error(f"Unable to delete product {p_code} from table {schema}.prodotti. {e}")
         return -1
 
 #register a new supplier:

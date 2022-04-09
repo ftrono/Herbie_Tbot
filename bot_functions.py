@@ -21,7 +21,7 @@ def extract_barcode(image):
 #inline picker keyboard:
 def inline_picker(schema, column_name):
     buf = []
-    keyboard = [[InlineKeyboardButton('NUOVO', callback_data='NUOVO')]]
+    keyboard = []
     cnt = 0
     items = db_interactor.get_column(schema, column_name)
     #build inline keyboard:
