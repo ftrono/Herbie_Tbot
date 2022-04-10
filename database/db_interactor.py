@@ -125,17 +125,44 @@ def match_product(schema, p_code=None, p_text=None):
         return Matches
 
 
-#add a new product:
-def add_prod(conn, cursor, schema, info):
+#add a new product to DB:
+def add_prod(schema, info):
     try:
+        conn, cursor = db_connect()
         query = f"INSERT INTO {schema}.prodotti (codiceprod, produttore, nome, categoria, quantita) VALUES ({info['p_code']}, '{info['supplier']}', '{info['p_name']}', '{info['category']}', {info['pieces']})"
         cursor.execute(query)
         conn.commit()
         dlog.info(f"Added product {info['p_code']} to table {schema}.prodotti.")
+        db_disconnect(conn, cursor)
         return 0
     except psycopg2.Error as e:
-        dlog.error(f"Unable to add product {info['p_code']} to table {schema}.prodotti. {e}")
+        dlog.warning(f"Product {info['p_code']} already existing in table {schema}.prodotti, or other exception. {e}")
         return -1
+
+
+#add a new product or update basic product info:
+def register_prodinfo(schema, info):
+    try:
+        #1) try to insert the new product to the DB:
+        ret = add_prod(schema, info)
+
+        #2) if adding fails -> product already existing, so update prod info in the DB instead:
+        if ret == -1:
+            try:
+                conn, cursor = db_connect()
+                query = f"UPDATE {schema}.prodotti SET produttore = '{info['supplier']}', nome = '{info['p_name']}', categoria = '{info['category']}', quantita ={info['pieces']} WHERE codiceprod = {info['p_code']}"
+                cursor.execute(query)
+                conn.commit()
+                dlog.info(f"Updated basic info for product {info['p_code']} in table {schema}.prodotti.")
+                ret = 0
+                db_disconnect(conn, cursor)
+            except psycopg2.Error as e:
+                dlog.error(f"Unable to add product {info['p_code']} to table {schema}.prodotti. {e}")
+                ret = -1
+        
+    except psycopg2.Error as e:
+        dlog.error(f"Unable to add product {info['p_code']} to table {schema}.prodotti. {e}")
+    return ret
 
 
 #add a detail info for a product:
@@ -153,7 +180,7 @@ def add_detail(schema, p_code, colname, value):
         return -1
 
 
-#delete a product:
+#delete a product from DB:
 def delete_prod(conn, cursor, schema, p_code):
     try:
         query = f"DELETE FROM {schema}.prodotti WHERE codiceprod = {p_code}"

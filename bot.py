@@ -354,7 +354,7 @@ def process_pcode(update, context):
     
     else:
         #B) FROM TEXT SENT BY THE USER -> EITHER P_CODE OR P_TEXT:
-        p_text = update.message.text
+        p_text = update.message.text.lower()
 
         #CASE B.1) NUMERICAL CODE:
         try:
@@ -446,10 +446,10 @@ def process_pcode(update, context):
         context.user_data['pieces'] = Matches['quantita'].iloc[0]
         #ask what to do:
         msg = f"{msg}Ti invio il recap del prodotto:\n"+\
-            f"- Produttore: {Matches['produttore'].iloc[0]}\n"+\
-            f"- Nome: {Matches['nome'].iloc[0]}\n"+\
-            f"- Categoria: {Matches['categoria'].iloc[0]}\n"+\
-            f"- Numero di pezzi: {Matches['quantita'].iloc[0]}\n"+\
+            f"- Produttore: <i>{Matches['produttore'].iloc[0]}</i>\n"+\
+            f"- Nome: <i>{Matches['nome'].iloc[0]}</i>\n"+\
+            f"- Categoria: <i>{Matches['categoria'].iloc[0]}</i>\n"+\
+            f"- Numero di pezzi: <i>{Matches['quantita'].iloc[0]}</i>\n"+\
             f"\nCosa vuoi fare?"
         keyboard = [[InlineKeyboardButton('Modifica info', callback_data='Modifica info')],
                     [InlineKeyboardButton('Aggiungi info', callback_data='Aggiungi info')],
@@ -672,11 +672,11 @@ def process_pieces(update, context):
         'pieces': int(context.user_data['pieces']),
     }
     msg = f"{msg}Ti invio il recap del prodotto:\n"+\
-            f"- Codice: {utts['p_code']}\n"+\
-            f"- Produttore: {utts['supplier']}\n"+\
-            f"- Nome: {utts['p_name']}\n"+\
-            f"- Categoria: {utts['category']}\n"+\
-            f"- Numero di pezzi: {utts['pieces']}\n"+\
+            f"- Codice: <i>{utts['p_code']}</i>\n"+\
+            f"- Produttore: <i>{utts['supplier']}</i>\n"+\
+            f"- Nome: <i>{utts['p_name']}</i>\n"+\
+            f"- Categoria: <i>{utts['category']}</i>\n"+\
+            f"- Numero di pezzi: <i>{utts['pieces']}</i>\n"+\
             f"\nPosso salvare nel magazzino?"
     keyboard = [[InlineKeyboardButton('Sì', callback_data='Sì'),
                 InlineKeyboardButton('No', callback_data='No')]]
@@ -713,23 +713,16 @@ def save_to_db(update, context):
     if choice == 'Sì':
         schema = context.user_data.get('schema')
         p_code = context.user_data['p_code']
-        utts = {
+        info = {
             'p_code': p_code,
             'supplier': context.user_data['supplier'],
             'p_name': context.user_data['p_name'],
             'category': context.user_data['category'],
             'pieces': int(context.user_data['pieces']),
         }
-        try:
-            conn, cursor = db_connect()
-            if context.user_data.get('in_db') == True:
-                ret = db_interactor.delete_prod(conn, cursor, schema, p_code)
-            ret = db_interactor.add_prod(conn, cursor, schema, utts)
-            db_disconnect(conn, cursor)
-        except:
-            err = True
-        
-        if err == True or ret == -1:
+        #save to DB:
+        ret = db_interactor.register_prodinfo(schema, info)
+        if ret == -1:
             msg = f"C'è stato un problema col mio DB, ti chiedo scusa!"
             message = context.bot.send_message(chat_id=update.effective_chat.id, text=msg)
             context.user_data["last_sent"] = message.message_id
@@ -833,7 +826,7 @@ def process_price(update, context):
         context.user_data["last_sent"] = message.message_id
         return CONV_END
     else:
-        msg = f"Segnato {price:.2f}€. 2) Il prodotto è un <b>dispositivo medico</b>?"
+        msg = f"Segnato {price:.2f}€. Prossima:\n\n2) Il prodotto è un <b>dispositivo medico</b>?"
         keyboard = [[InlineKeyboardButton('Sì', callback_data='Sì'),
                     InlineKeyboardButton('No', callback_data='No')]]
         message = context.bot.send_message(chat_id=update.effective_chat.id, text=msg,
@@ -862,7 +855,7 @@ def process_disp_medico(update, context):
         context.user_data["last_sent"] = message.message_id
         return CONV_END
     else:
-        msg = f"Segnato {choice}. 3) Qual è l'<b>età minima</b> per l'assunzione del prodotto?\n"+\
+        msg = f"Segnato {choice}. Prossima:\n\n3) Qual è l'<b>età minima</b> per l'assunzione del prodotto?\n"+\
                 f"Scrivimi solo l'età <i>in cifre</i> (es. 18, 3, 0, ...)"
         message = context.bot.send_message(chat_id=update.effective_chat.id, text=msg,
             parse_mode=ParseMode.HTML)
@@ -892,7 +885,7 @@ def process_min_age(update, context):
         return CONV_END
     else:
         agestr = "anno" if age == 1 else f"anni"
-        msg = f"Segnato {age} {agestr}. 4) Il prodotto è <b>biologico</b>?"
+        msg = f"Segnato {age} {agestr}. Prossima:\n\n4) Il prodotto è <b>biologico</b>?"
         keyboard = [[InlineKeyboardButton('Sì', callback_data='Sì'),
                     InlineKeyboardButton('No', callback_data='No')]]
         message = context.bot.send_message(chat_id=update.effective_chat.id, text=msg,
@@ -921,7 +914,7 @@ def process_bio(update, context):
         context.user_data["last_sent"] = message.message_id
         return CONV_END
     else:
-        msg = f"Segnato {choice}. 5) Il prodotto è <b>vegano</b>?"
+        msg = f"Segnato {choice}. Prossima:\n\n5) Il prodotto è <b>vegano</b>?"
         keyboard = [[InlineKeyboardButton('Sì', callback_data='Sì'),
                     InlineKeyboardButton('No', callback_data='No')]]
         message = context.bot.send_message(chat_id=update.effective_chat.id, text=msg,
@@ -950,7 +943,7 @@ def process_vegan(update, context):
         context.user_data["last_sent"] = message.message_id
         return CONV_END
     else:
-        msg = f"Segnato {choice} 6) Il prodotto è <b>senza glutine</b>?"
+        msg = f"Segnato {choice}. Prossima:\n\n6) Il prodotto è <b>senza glutine</b>?"
         keyboard = [[InlineKeyboardButton('Sì', callback_data='Sì'),
                     InlineKeyboardButton('No', callback_data='No')]]
         message = context.bot.send_message(chat_id=update.effective_chat.id, text=msg,
@@ -979,7 +972,7 @@ def process_nogluten(update, context):
         context.user_data["last_sent"] = message.message_id
         return CONV_END
     else:
-        msg = f"Segnato {choice}. 7) Il prodotto è <b>senza lattosio</b>?"
+        msg = f"Segnato {choice}. Prossima:\n\n7) Il prodotto è <b>senza lattosio</b>?"
         keyboard = [[InlineKeyboardButton('Sì', callback_data='Sì'),
                     InlineKeyboardButton('No', callback_data='No')]]
         message = context.bot.send_message(chat_id=update.effective_chat.id, text=msg,
@@ -1008,7 +1001,7 @@ def process_nolactose(update, context):
         context.user_data["last_sent"] = message.message_id
         return CONV_END
     else:
-        msg = f"Segnato {choice}. 8) Il prodotto è <b>senza zucchero</b>?"
+        msg = f"Segnato {choice}. Prossima:\n\n8) Il prodotto è <b>senza zucchero</b>?"
         keyboard = [[InlineKeyboardButton('Sì', callback_data='Sì'),
                     InlineKeyboardButton('No', callback_data='No')]]
         message = context.bot.send_message(chat_id=update.effective_chat.id, text=msg,
@@ -1037,7 +1030,7 @@ def process_nosugar(update, context):
         context.user_data["last_sent"] = message.message_id
         return CONV_END
     else:
-        msg = f"Segnato {choice}.\nHo completato l'aggiornamento del prodotto!"
+        msg = f"Segnato {choice}.\n\nHo completato l'aggiornamento del prodotto. A presto!"
         message = context.bot.send_message(chat_id=update.effective_chat.id, text=msg)
         context.user_data["last_sent"] = message.message_id
         return CONV_END
