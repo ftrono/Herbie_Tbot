@@ -1,11 +1,9 @@
-from dataclasses import replace
+from pandas import DataFrame
 from telegram import ReplyKeyboardRemove, Update, ParseMode, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import Updater, CommandHandler, MessageHandler, Filters, ConversationHandler, CallbackQueryHandler, CallbackContext
 import database.db_interactor as db_interactor
 from database.db_tools import db_connect, db_disconnect
 import bot_functions
-import matplotlib.pyplot as plt
-from matplotlib.backends.backend_pdf import PdfPages
 from globals import *
 
 #HERBIE TELEGRAM BOT
@@ -21,6 +19,7 @@ ask_register = f"Per poter utilizzare il bot è necessario richiedere l'OTP di a
 welcome = f"\n🤖 <b>Lancia un comando per iniziare!</b>"+\
             f"\n- /start - Scelta magazzino"+\
             f"\n- /prodotto - Registra o aggiorna un prodotto"+\
+            f"\n- /vista_prodotti - Scarica tabella Prodotti in formato stampa"+\
             f"\n- /produttore - Registra o aggiorna un produttore e il suo sconto medio sugli ordini"+\
             f"\n- /categoria - Registra o aggiorna una categoria prodotti e la sua aliquota IVA applicabile"+\
             f"\n- /registrami - Registra una nuova autorizzazione"+\
@@ -1037,7 +1036,7 @@ def process_nosugar(update, context):
 
 
 #"viste":
-def viste(update: Update, context: CallbackContext):
+def vista_prodotti(update: Update, context: CallbackContext):
     #reset:
     end_open_query(update, context)
     remove_open_keyboards(update, context)
@@ -1045,30 +1044,20 @@ def viste(update: Update, context: CallbackContext):
     schema = get_schema(update, context)
     if schema == None:
         return CONV_END
-    # try:
-    conn, cursor = db_connect()
-    Prodotti = db_interactor.get_view_prodotti(conn, schema)
-    db_disconnect(conn, cursor)
-    if Prodotti.empty == False:
-        #build plt table:
-        fig, ax =plt.subplots(figsize=(12,4))
-        ax.axis('tight')
-        ax.axis('off')
-        ax.table(cellText=Prodotti.values,colLabels=Prodotti.columns,loc='center')
-        #export table to pdf:
-        filename = './data_cache/prodotti.pdf'
-        pp = PdfPages(filename)
-        pp.savefig(fig, bbox_inches='tight')
-        pp.close()
-        #send pdf:
-        pdfdoc = open(filename, 'rb')
+    
+    #get view:
+    filename = './data_cache/prodotti.xlsx'
+    ret = bot_functions.create_view_prodotti(schema, filename)
+    if ret == 0:
+        #3) send file to user:
+        xlsx = open(filename, 'rb')
         chat_id=update.effective_chat.id
-        context.bot.send_document(chat_id, pdfdoc)
+        context.bot.send_document(chat_id, xlsx)
         os.remove(filename)
-    # except:
-    #     msg = f"C'è stato un problema col mio DB, ti chiedo scusa!"
-    #     message = context.bot.send_message(chat_id=update.effective_chat.id, text=msg)
-    #     context.user_data["last_sent"] = message.message_id
+    else:
+        msg = f"C'è stato un problema col mio DB, ti chiedo scusa!"
+        message = context.bot.send_message(chat_id=update.effective_chat.id, text=msg)
+        context.user_data["last_sent"] = message.message_id
 
 
 #GENERIC HANDLERS:
@@ -1109,7 +1098,7 @@ def main() -> None:
     dispatcher = updater.dispatcher
 
     #command handlers:
-    #dispatcher.add_handler(CommandHandler("viste", viste))
+    dispatcher.add_handler(CommandHandler("vista_prodotti", vista_prodotti))
 
     #conversation handlers:
     #/start":

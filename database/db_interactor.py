@@ -179,19 +179,6 @@ def add_detail(schema, p_code, colname, value):
         dlog.error(f"Unable to update detail for product {p_code} in table {schema}.prodotti. {e}")
         return -1
 
-
-#delete a product from DB:
-def delete_prod(conn, cursor, schema, p_code):
-    try:
-        query = f"DELETE FROM {schema}.prodotti WHERE codiceprod = {p_code}"
-        cursor.execute(query)
-        conn.commit()
-        dlog.info(f"Deleted product {p_code} from table {schema}.prodotti.")
-        return 0
-    except psycopg2.Error as e:
-        dlog.error(f"Unable to delete product {p_code} from table {schema}.prodotti. {e}")
-        return -1
-
 #register a new supplier:
 def add_supplier(schema, supplier, discount):
     try:
@@ -243,16 +230,63 @@ def add_category(schema, category, vat):
         return -1
 
 
+#delete a product from DB:
+def delete_prod(schema, p_code):
+    try:
+        conn, cursor = db_connect()
+        query = f"DELETE FROM {schema}.prodotti WHERE codiceprod = {p_code}"
+        cursor.execute(query)
+        conn.commit()
+        dlog.info(f"Deleted product {p_code} from table {schema}.prodotti.")
+        db_disconnect(conn, cursor)
+        return 0
+    except psycopg2.Error as e:
+        dlog.error(f"Unable to delete product {p_code} from table {schema}.prodotti. {e}")
+        return -1
+
+
+#delete a product from DB:
+def clean_db(schema):
+    try:
+        conn, cursor = db_connect()
+
+        #1) clean table Prodotti from items with zero pieces:
+        query = f"DELETE FROM {schema}.prodotti WHERE quantita = 0"
+        cursor.execute(query)
+        conn.commit()
+        dlog.info(f"Cleaned table {schema}.prodotti.")
+
+        #2) clean table Produttori from suppliers with no products:
+        query = f"DELETE FROM {schema}.produttori WHERE NOT EXISTS (SELECT prodotti.produttore FROM {schema}.prodotti WHERE prodotti.produttore = produttori.produttore)"
+        cursor.execute(query)
+        conn.commit()
+        dlog.info(f"Cleaned table {schema}.produttori.")
+        
+        #3) clean table Categorie from categories with no products:
+        query = f"DELETE FROM {schema}.categorie WHERE NOT EXISTS (SELECT prodotti.categoria FROM {schema}.prodotti WHERE prodotti.categoria = categorie.categoria)"
+        cursor.execute(query)
+        conn.commit()
+        dlog.info(f"Cleaned table {schema}.categorie.")
+
+        db_disconnect(conn, cursor)
+        return 0
+
+    except psycopg2.Error as e:
+        dlog.error(f"Unable to clean tables in schema {schema} in the DB. {e}")
+        return -1
+
+
 #get list of products from DB:
-def get_view_prodotti(conn, schema, supplier=None):
+def get_view_prodotti(schema, supplier=None):
     suppstr = ""
     FullList = pd.DataFrame()
     try:
+        conn, cursor = db_connect()
         if supplier:
-            suppstr = f" WHERE produttore = {supplier}"
-        query = f"SELECT * FROM {schema}.prodotti{suppstr}"
+            suppstr = f"WHERE produttore = {supplier}"
+        query = f"SELECT prodotti.*, produttori.scontomedio, categorie.aliquota FROM {schema}.prodotti INNER JOIN {schema}.produttori ON prodotti.produttore = produttori.produttore INNER JOIN {schema}.categorie ON prodotti.categoria = categorie.categoria {suppstr}"
         FullList = pd.read_sql(query, conn)
+        db_disconnect(conn, cursor)
     except psycopg2.Error as e:
-        dlog.error(f"Unable to perform get_suggestion_list for supplier {supplier}. {e}")
+        dlog.error(f"Unable to perform get view prodotti for supplier: {supplier if supplier else 'all'}. {e}")
     return FullList
-
