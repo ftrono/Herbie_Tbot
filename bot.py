@@ -312,9 +312,10 @@ def prodotto(update, context):
     schema = get_schema(update, context)
     if schema == None:
         return CONV_END
-    msg = f"Ciao! Sei nel magazzino <b>{schema}</b>.\n\nPer iniziare, mi serve un <b>codice a barre</b>. Puoi:\n"+\
-            f"- Inviarmi una <b>FOTO</b> del codice, oppure\n"+\
-            f"- Trascrivermelo via <b>TESTO</b> (SENZA spazi)."
+    msg = f"Ciao! Sei nel magazzino <b>{schema}</b>.\n\nPer iniziare, devo <b>identificare un prodotto</b>. Puoi:\n"+\
+            f"- Inviarmi una <b>FOTO</b> del codice a barre, oppure\n"+\
+            f"- Inviarmi il <b>NOME</b> del prodotto, oppure\n"+\
+            f"- Trascrivermi il codice a barre via <b>TESTO</b> (SENZA spazi)."
     message = context.bot.send_message(chat_id=update.effective_chat.id, text=msg,
         parse_mode=ParseMode.HTML)
     context.user_data["last_sent"] = message.message_id
@@ -323,82 +324,149 @@ def prodotto(update, context):
 #prodotto - 2) process p_code:
 def process_pcode(update, context):
     p_code = None
+    from_match = False
     schema = context.user_data.get('schema')
     photo_message = update.message.message_id
     msg = f"Sto estraendo i dati..."
     message = context.bot.send_message(chat_id=update.effective_chat.id, text=msg)
     context.user_data["last_sent"] = message.message_id
-    #1) check if message sent by usercontains a photo:
+
+    #get product reference:
+    #A) FROM PHOTO -> P_CODE:
     if update.message.photo != []:
-        #a) extract and store barcode from image:
+        #extract and store barcode from image:
         try:
             image = update.message.photo[-1].get_file()
             p_code = bot_functions.extract_barcode(image)
+            #delete photo to save space:
             context.bot.delete_message(chat_id=update.effective_chat.id, message_id=photo_message)
+            #store barcode in bot memory:
+            tlog.info(f"Letto codice {p_code}.")
+            msg = f"Ho letto il codice {p_code}. "
+            context.user_data['p_code'] = int(p_code)
         except:
+            #no barcodes found:
             context.bot.delete_message(chat_id=update.effective_chat.id, message_id=photo_message)
-            msg = f"Non ho trovato codici.\n\nProva con un'altra foto, o in alternativa trascrivimi il codice a barre.\n\nOppure usa /esci per uscire."
+            msg = f"Non ho trovato codici.\n\nProva con un'altra foto, o in alternativa trascrivimi il nome o il codice a barre.\n\nOppure usa /esci per uscire."
             message.edit_text(text=msg)
+            context.user_data['Matches'] = None
             return PROCESS_PCODE
+    
     else:
-        #b) get code from the text sent by user:
-        p_code = update.message.text
+        #B) FROM TEXT SENT BY THE USER -> EITHER P_CODE OR P_TEXT:
+        p_text = update.message.text
+
+        #CASE B.1) NUMERICAL CODE:
         try:
-            p_code = int(p_code)
+            #try conversion to int:
+            p_code = int(p_text)
+
+            #check if the code is the index of a Matches list already sent:
+            if p_code in [1, 2, 3]:
+                Matches = context.user_data.get('Matches')
+                tlog.info(f"Converted code {p_code}")
+                if Matches is not None:
+                    try:
+                        ind = p_code-1
+                        #if found -> get the reference row and proceed to edit info / add info:
+                        Matches = Matches.iloc[[ind]]
+                        Matches.reset_index(drop=True, inplace=True)
+                        #if found -> proceed to edit info / add info:
+                        p_code = Matches['codiceprod'].iloc[0]
+                        tlog.info(f"Trovato codice {p_code}.")
+                        from_match = True
+                    except:
+                        tlog.info(f"Index {ind} not found in previous Matches list.")
+
+            #else -> the code is a barcode. Store barcode in bot memory:
+            context.user_data['p_code'] = p_code
+            tlog.info(f"Trovato codice {p_code}.")
+            msg = f"Ho trovato il codice {p_code}. "
+
+        #CASE B.2) TENTATIVE PRODUCT TEXT (P_TEXT):
         except:
-            msg = f"Il codice deve essere una sequenza di cifre. Prova a reinviarmelo!"
-            message.edit_text(text=msg)
-            return PROCESS_PCODE
+            #match existing product names in DB:
+            Matches = db_interactor.match_product(schema, p_text=p_text)
 
-    #2) store barcode in bot memory:
-    context.user_data['p_code'] = p_code
-    tlog.info(f"Letto codice {p_code}.")
-    msg = f"Ho letto il codice {p_code}. "
+            #if not found -> ask retry:
+            if Matches.empty == True:
+                msg = f"Non ho trovato prodotti con questo nome.\n\nRiprova a inviarmi il nome o il codice a barre, oppure una foto del barcode.\n\nOppure usa /esci per uscire."
+                message.edit_text(text=msg)
+                context.user_data['Matches'] = None
+                return PROCESS_PCODE
 
-    #3) check if prod in DB:
+            #if more matches -> show list of best matches, each with an index:
+            elif len(Matches.index) > 1:
+                msg = f"Ho trovato più di un prodotto simile. Se il prodotto che cerchi è uno di questi, inviami il <b><i>numero</i></b>:"
+                for ind in Matches.index:
+                    msg = f"{msg}\n   ' <b><i>{ind+1}</i></b> ' per:  <i>{Matches['produttore'].iloc[ind]} {Matches['nome'].iloc[ind]}</i>"
+                msg = f"{msg}\n\nAltrimenti riprova a inviarmi il nome o il codice a barre, oppure una foto del barcode.\n\nOppure usa /esci per uscire."
+                message.edit_text(text=msg, parse_mode=ParseMode.HTML)
+                context.user_data['Matches'] = Matches
+                return PROCESS_PCODE
+
+            else:
+                #if found -> proceed to edit info / add info:
+                p_code = Matches['codiceprod'].iloc[0]
+                context.user_data['p_code'] = p_code
+                tlog.info(f"Trovato codice {p_code}.")
+                msg = f"Ho trovato il codice {p_code}. "
+                from_match = True
+    
+    #check if the p_code is new or already registered in the DB:
+    if from_match == False:
+        try:
+            conn, cursor = db_connect()
+            Matches = db_interactor.match_product(schema, p_code=p_code)
+            db_disconnect(conn, cursor)
+            #if product not found -> new product:
+            if Matches.empty == True:
+                msg = f"{msg}Questo prodotto non è nel mio magazzino. Lo inseriamo ora?"
+                keyboard = [[InlineKeyboardButton('Sì', callback_data='Sì'),
+                            InlineKeyboardButton('No', callback_data='No')]]
+                message.edit_text(msg,
+                    parse_mode=ParseMode.HTML,
+                    reply_markup=InlineKeyboardMarkup(keyboard))
+                context.user_data['Matches'] = None
+                return INIT_ADD
+        except:
+            #DB error:
+            msg = f"C'è stato un problema col mio DB, ti chiedo scusa!"
+            message = context.bot.send_message(chat_id=update.effective_chat.id, text=msg)
+            context.user_data["last_sent"] = message.message_id
+            context.user_data['Matches'] = None
+            return CONV_END
+        
+    #show recap message of product found:
     try:
-        conn, cursor = db_connect()
-        Prodotto = db_interactor.get_product(conn, schema, p_code)
-        db_disconnect(conn, cursor)
-        #a) if product not found -> new product:
-        if Prodotto.empty == True:
-            context.user_data['in_db'] = False
-            msg = f"{msg}Questo prodotto non è nel mio magazzino. Lo inseriamo ora?"
-            keyboard = [[InlineKeyboardButton('Sì', callback_data='Sì'),
-                        InlineKeyboardButton('No', callback_data='No')]]
-            message.edit_text(msg,
-                parse_mode=ParseMode.HTML,
-                reply_markup=InlineKeyboardMarkup(keyboard))
-            return INIT_ADD
-
-        #b) if product found -> edit info / add info:
-        else:
-            context.user_data['in_db'] = True
-            #store additional info in bot memory:
-            context.user_data['supplier'] = Prodotto['produttore'].iloc[0]
-            context.user_data['p_name'] = Prodotto['nome'].iloc[0]
-            context.user_data['category'] = Prodotto['categoria'].iloc[0]
-            context.user_data['pieces'] = Prodotto['quantita'].iloc[0]
-            #ask what to do:
-            msg = f"{msg}Ti invio il recap del prodotto:\n"+\
-                f"- Produttore: {Prodotto['produttore'].iloc[0]}\n"+\
-                f"- Nome: {Prodotto['nome'].iloc[0]}\n"+\
-                f"- Categoria: {Prodotto['categoria'].iloc[0]}\n"+\
-                f"- Numero di pezzi: {Prodotto['quantita'].iloc[0]}\n"+\
-                f"\nCosa vuoi fare?"
-            keyboard = [[InlineKeyboardButton('Modifica info', callback_data='Modifica info')],
-                        [InlineKeyboardButton('Aggiungi info', callback_data='Aggiungi info')],
-                        [InlineKeyboardButton('Annulla', callback_data='Annulla')]]
-            message.edit_text(msg,
-                parse_mode=ParseMode.HTML,
-                reply_markup=InlineKeyboardMarkup(keyboard))
-            return NEXT_STEP
+        #store all match info in bot memory:
+        context.user_data['supplier'] = Matches['produttore'].iloc[0]
+        context.user_data['p_name'] = Matches['nome'].iloc[0]
+        context.user_data['category'] = Matches['categoria'].iloc[0]
+        context.user_data['pieces'] = Matches['quantita'].iloc[0]
+        #ask what to do:
+        msg = f"{msg}Ti invio il recap del prodotto:\n"+\
+            f"- Produttore: {Matches['produttore'].iloc[0]}\n"+\
+            f"- Nome: {Matches['nome'].iloc[0]}\n"+\
+            f"- Categoria: {Matches['categoria'].iloc[0]}\n"+\
+            f"- Numero di pezzi: {Matches['quantita'].iloc[0]}\n"+\
+            f"\nCosa vuoi fare?"
+        keyboard = [[InlineKeyboardButton('Modifica info', callback_data='Modifica info')],
+                    [InlineKeyboardButton('Aggiungi info', callback_data='Aggiungi info')],
+                    [InlineKeyboardButton('Annulla', callback_data='Annulla')]]
+        message.edit_text(msg,
+            parse_mode=ParseMode.HTML,
+            reply_markup=InlineKeyboardMarkup(keyboard))
+        #reset matches:
+        context.user_data['Matches'] = None
+        return NEXT_STEP
 
     except:
-        #c) DB error:
+        #DB error:
         msg = f"C'è stato un problema col mio DB, ti chiedo scusa!"
         message = context.bot.send_message(chat_id=update.effective_chat.id, text=msg)
         context.user_data["last_sent"] = message.message_id
+        context.user_data['Matches'] = None
         return CONV_END
 
 #common helper:

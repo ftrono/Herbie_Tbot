@@ -6,7 +6,7 @@ from database.db_tools import db_connect, db_disconnect
 # - get_auths()
 # - register_auth()
 # - get_column()
-# - get_product()
+# - match_product()
 # - add_prod()
 # - delete_prod()
 # - get_view_prodotti()
@@ -66,16 +66,63 @@ def get_column(schema, column_name):
     return items
 
 
-#get basic product info:
-def get_product(conn, schema, p_code):
-    Prodotto = pd.DataFrame()
-    try:
-        #extract the matching product (direct match):
-        query = f"SELECT codiceprod, produttore, nome, categoria, quantita FROM {schema}.prodotti WHERE codiceprod = {p_code}"
-        Prodotto = pd.read_sql(query, conn)
-    except psycopg2.Error as e:
-        dlog.error(f"DB query error for product {p_code} in table {schema}.prodotti. {e}")
-    return Prodotto
+#find matching product and get info (ret -> DataFrame):
+def match_product(schema, p_code=None, p_text=None):
+    Prodotti = pd.DataFrame()
+    if not p_code and not p_text:
+        dlog.error("match_product: no args for query.")
+        return Prodotti
+    
+    #a) if p_code is available -> directly extract the matching product (direct match):
+    if p_code != None:
+        p_code = int(p_code)
+        try:
+            conn, cursor = db_connect()
+            query = f"SELECT * FROM {schema}.prodotti WHERE codiceprod = {p_code}"
+            Prodotti = pd.read_sql(query, conn)
+            db_disconnect(conn, cursor)
+        except Exception as e:
+            dlog.error(f"DB query error for 'p_code'. {e}")
+        return Prodotti
+    
+    #b) tokenize p_text to extract p_name and find best matches in DB:
+    else:
+        try:
+            conn, cursor = db_connect()
+            query = f"SELECT * FROM {schema}.prodotti"
+            Prodotti = pd.read_sql(query, conn)
+            db_disconnect(conn, cursor)
+        except Exception as e:
+            dlog.error(f"DB query error for 'p_code'.")
+            return Prodotti
+        
+        #count matches for each name:
+        p_text = p_text.strip()
+        tokens = p_text.split()
+        matches = {}
+        for ind in Prodotti.index:
+            cnt = 0
+            missed = 0
+            name = []
+            #search jointly in columns supplier and name:
+            name = Prodotti['produttore'].iloc[ind].split()
+            name = name + Prodotti['nome'].iloc[ind].split()
+            for tok in tokens:
+                if tok in name:
+                    cnt = cnt+1
+                else:
+                    missed = missed+1
+                    #max 3 consecutive missed:
+                    if cnt <=1 and missed == 3:
+                        break
+            if cnt >= 1:
+                matches[ind] = cnt
+        
+        #fiter the dict keeping only the 3 items with the maximum frequency found:
+        matches = dict(filter(lambda elem: elem[1] == max(matches.values()), matches.items()))
+        Matches = Prodotti.iloc[list(matches.keys())[0:3]]
+        Matches.reset_index(drop=True, inplace=True)
+        return Matches
 
 
 #add a new product:
