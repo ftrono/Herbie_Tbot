@@ -1,6 +1,7 @@
 python-telegram-bot==13.11
 psycopg2-binary
 pandas
+Pillow
 pyzbar
 openpyxl
 xlsxwriter
