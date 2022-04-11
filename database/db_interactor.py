@@ -129,7 +129,7 @@ def match_product(schema, p_code=None, p_text=None):
 def add_prod(schema, info):
     try:
         conn, cursor = db_connect()
-        query = f"INSERT INTO {schema}.prodotti (codiceprod, produttore, nome, categoria, quantita) VALUES ({info['p_code']}, '{info['supplier']}', '{info['p_name']}', '{info['category']}', {info['pieces']})"
+        query = f"INSERT INTO {schema}.prodotti (codiceprod, produttore, nome, categoria, quantita, prezzo) VALUES ({info['p_code']}, '{info['supplier']}', '{info['p_name']}', '{info['category']}', {info['pieces']}, {info['price']})"
         cursor.execute(query)
         conn.commit()
         dlog.info(f"Added product {info['p_code']} to table {schema}.prodotti.")
@@ -150,7 +150,7 @@ def register_prodinfo(schema, info):
         if ret == -1:
             try:
                 conn, cursor = db_connect()
-                query = f"UPDATE {schema}.prodotti SET produttore = '{info['supplier']}', nome = '{info['p_name']}', categoria = '{info['category']}', quantita ={info['pieces']} WHERE codiceprod = {info['p_code']}"
+                query = f"UPDATE {schema}.prodotti SET produttore = '{info['supplier']}', nome = '{info['p_name']}', categoria = '{info['category']}', quantita = {info['pieces']}, prezzo = {info['price']} WHERE codiceprod = {info['p_code']}"
                 cursor.execute(query)
                 conn.commit()
                 dlog.info(f"Updated basic info for product {info['p_code']} in table {schema}.prodotti.")

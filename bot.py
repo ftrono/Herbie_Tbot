@@ -11,7 +11,7 @@ from globals import *
 #GLOBALS:
 #conversation states:
 START, PICK_WH, SET_AUTH = range(3)
-PROCESS_PCODE, ASK_DISCOUNT, ASK_ALIQUOTA, INIT_ADD, PROCESS_SUPPLIER, SAVE_SUPPLIER, PROCESS_PNAME, PROCESS_CATEGORY, SAVE_CATEGORY, PROCESS_PIECES, SAVE_EDIT, NEXT_STEP, EDIT_INFO, PROCESS_PRICE, PROCESS_DISP_MEDICO, PROCESS_MIN_AGE, PROCESS_BIO, PROCESS_VEGAN, PROCESS_NOGLUTEN, PROCESS_NOLACTOSE, PROCESS_NOSUGAR = range(21)
+PROCESS_PCODE, ASK_DISCOUNT, ASK_ALIQUOTA, INIT_ADD, PROCESS_SUPPLIER, SAVE_SUPPLIER, PROCESS_PNAME, PROCESS_CATEGORY, SAVE_CATEGORY, PROCESS_PRICE, PROCESS_PIECES, SAVE_EDIT, NEXT_STEP, EDIT_INFO, PROCESS_DISP_MEDICO, PROCESS_MIN_AGE, PROCESS_BIO, PROCESS_VEGAN, PROCESS_NOGLUTEN, PROCESS_NOLACTOSE, PROCESS_NOSUGAR = range(21)
 CONV_END = -1 #value of ConversationHandler.END
 
 #default messages:
@@ -26,13 +26,13 @@ welcome = f"\n🤖 <b>Lancia un comando per iniziare!</b>"+\
             f"\n- /esci - Annulla l'operazione corrente"
 
 #reset functions:
-def end_open_query(update: Update, context: CallbackContext):
+def end_open_query(update, context):
     try:
         update.callback_query.answer()
     except:
         pass
 
-def remove_open_keyboards(update: Update, context: CallbackContext):
+def remove_open_keyboards(update, context):
     try:
         toend = context.user_data.get("last_sent")
         if toend != None:
@@ -40,17 +40,24 @@ def remove_open_keyboards(update: Update, context: CallbackContext):
     except:
         pass
 
+def reset_priors(update, context):
+    end_open_query(update, context)
+    remove_open_keyboards(update, context)
+    context.user_data['to_edit'] = None
+    context.user_data["NEW_SUPPLIER"] = None
+    context.user_data["NEW_CATEGORY"] = None
+    context.user_data['Matches'] = None
+
 
 #COMMANDS & HELPERS:
 #"/start":
 #start - 1) check & get user auth:
 def start(update, context):
     #reset:
-    end_open_query(update, context)
-    remove_open_keyboards(update, context)
+    reset_priors(update, context)
+    #check user authorizations:
     chat_id = update.effective_chat.id
     tlog.info(f"/start launched by user: {chat_id}")
-    #check user authorizations:
     msg = f"Autenticazione in corso..."
     message = context.bot.send_message(chat_id=chat_id, text=msg)
     context.user_data["last_sent"] = message.message_id
@@ -96,10 +103,9 @@ def pick_wh(update, context):
 #registrami - 1) ask OTP:
 def registrami(update: Update, context: CallbackContext):
     #reset:
-    end_open_query(update, context)
-    remove_open_keyboards(update, context)
-    chat_id = update.effective_chat.id
+    reset_priors(update, context)
     #asks user to send the OTP:
+    chat_id = update.effective_chat.id
     msg = f"Inviami l'OTP di accesso al tuo magazzino. Se non hai l'OTP, richiedilo all'amministratore."
     message = context.bot.send_message(chat_id=chat_id, text=msg)
     context.user_data["last_sent"] = message.message_id
@@ -215,7 +221,7 @@ def save_supplier(update, context):
         msg = f"Fatto! Ti ho salvato produttore {supplier} e relativo sconto medio {discount}% nel magazzino {schema}."
         #check if this state has been reached from the "/product" conversatiion: if so, continue there:
         if context.user_data.get("NEW_SUPPLIER") == True:
-            #ask product name:
+            #ask next:
             msg = f"{msg}\n\nOra scrivimi il nome dettagliato del <b>prodotto</b>. Aggiungi tutte le info necessarie, es.:\n\n<i>Grintuss pediatric sciroppo 12 flaconcini</i>\n\nOppure usa /esci per uscire."
             message = context.bot.send_message(chat_id=update.effective_chat.id, text=msg, parse_mode=ParseMode.HTML)
             context.user_data["last_sent"] = message.message_id
@@ -284,12 +290,14 @@ def save_category(update, context):
         msg = f"Fatto! Ti ho salvato categoria {category} e relativa aliquota IVA applicabile {vat}% nel magazzino {schema}."
         #check if this state has been reached from the "/product" conversatiion: if so, continue there:
         if context.user_data.get("NEW_CATEGORY") == True:
-            #ask product name:
-            msg = f"{msg}\n\nMi dici il <b>numero di pezzi</b> che hai in magazzino?\n\nScrivi solo la <i>cifra</i>, es. 1, 10, ...\n\nOppure usa /esci per uscire."
-            message = context.bot.send_message(chat_id=update.effective_chat.id, text=msg, parse_mode=ParseMode.HTML)
+            #ask next:
+            msg = f"{msg}\n\nQual è il <b>prezzo al pubblico</b> del prodotto?\n"+\
+                    f"Scrivi solo la <i>cifra</i> in Euro (es. 10 o 10,50)."
+            message = context.bot.send_message(chat_id=update.effective_chat.id, text=msg,
+                parse_mode=ParseMode.HTML)
             context.user_data["last_sent"] = message.message_id
             context.user_data["NEW_CATEGORY"] = None
-            return PROCESS_PIECES
+            return PROCESS_PRICE
         else:
             message = context.bot.send_message(chat_id=update.effective_chat.id, text=msg)
             context.user_data["last_sent"] = message.message_id
@@ -442,12 +450,14 @@ def process_pcode(update, context):
         context.user_data['supplier'] = Matches['produttore'].iloc[0]
         context.user_data['p_name'] = Matches['nome'].iloc[0]
         context.user_data['category'] = Matches['categoria'].iloc[0]
+        context.user_data['price'] = Matches['prezzo'].iloc[0]
         context.user_data['pieces'] = Matches['quantita'].iloc[0]
         #ask what to do:
         msg = f"{msg}Ti invio il recap del prodotto:\n"+\
             f"- Produttore: <i>{Matches['produttore'].iloc[0]}</i>\n"+\
             f"- Nome: <i>{Matches['nome'].iloc[0]}</i>\n"+\
             f"- Categoria: <i>{Matches['categoria'].iloc[0]}</i>\n"+\
+            f"- Prezzo: <i>{Matches['prezzo'].iloc[0]:.2f}€</i>\n"+\
             f"- Numero di pezzi: <i>{Matches['quantita'].iloc[0]}</i>\n"+\
             f"\nCosa vuoi fare?"
         keyboard = [[InlineKeyboardButton('Modifica info', callback_data='Modifica info')],
@@ -468,23 +478,6 @@ def process_pcode(update, context):
         context.user_data['Matches'] = None
         return CONV_END
 
-#common helper:
-def ask_supplier(update, context):
-    schema = context.user_data.get('schema')
-    #if caller is edit info:
-    if context.user_data.get('to_edit') != None:
-        msg = f""
-    else:
-        msg = f"Iniziamo. "
-    #supplier picker:
-    keyboard = bot_functions.inline_picker(schema, 'produttore')
-    msg = f"{msg}Dimmi il nome del <b>produttore</b>. Oppure usa /esci per uscire.\n\nNOTA: Se non è fra i suggerimenti, inviami direttamente il nome."
-    message = context.bot.send_message(chat_id=update.effective_chat.id, text=msg, 
-        parse_mode=ParseMode.HTML, 
-        reply_markup=InlineKeyboardMarkup(keyboard))
-    context.user_data["last_sent"] = message.message_id
-    return PROCESS_SUPPLIER
-
 #ADD 1) init:
 def init_add(update, context):
     #get open query:
@@ -502,17 +495,21 @@ def init_add(update, context):
         return ask_supplier(update, context)
 
 #common helper:
-def ask_pname(update, context, supplier=None):
-    #ask product name:
+def ask_supplier(update, context):
+    schema = context.user_data.get('schema')
     #if caller is edit info:
     if context.user_data.get('to_edit') != None:
-        msg = f"Scrivimi"
+        msg = f""
     else:
-        msg = f"Segnato produttore '{supplier}'! Ora scrivimi"
-    msg = f"{msg} il nome dettagliato del <b>prodotto</b>. Aggiungi tutte le info necessarie, es.:\n\n<i>Grintuss pediatric sciroppo 12 flaconcini</i>\n\nOppure usa /esci per uscire."
-    message = context.bot.send_message(chat_id=update.effective_chat.id, text=msg, parse_mode=ParseMode.HTML)
+        msg = f"Iniziamo. "
+    #supplier picker:
+    keyboard = bot_functions.inline_picker(schema, 'produttore')
+    msg = f"{msg}Dimmi il nome del <b>produttore</b>. Oppure usa /esci per uscire.\n\nNOTA: Se non è fra i suggerimenti, inviami direttamente il nome."
+    message = context.bot.send_message(chat_id=update.effective_chat.id, text=msg, 
+        parse_mode=ParseMode.HTML, 
+        reply_markup=InlineKeyboardMarkup(keyboard))
     context.user_data["last_sent"] = message.message_id
-    return PROCESS_PNAME
+    return PROCESS_SUPPLIER
 
 #ADD 2) process supplier and ask p_name:
 def process_supplier(update, context):
@@ -556,21 +553,17 @@ def process_supplier(update, context):
                 return ask_pname(update, context, supplier)
 
 #common helper:
-def ask_category(update, context, p_name=None):
+def ask_pname(update, context, supplier=None):
+    #ask product name:
     #if caller is edit info:
     if context.user_data.get('to_edit') != None:
         msg = f"Scrivimi"
     else:
-        msg = f"Segnato nome '{p_name}'! Ora dimmi"
-    msg = f"{msg} a quale <b>categoria</b> appartiene il prodotto (es. cosmesi, alimentazione, ...). Oppure usa /esci per uscire.\n\nNOTA: Se non è fra i suggerimenti, inviami direttamente il nome."
-    #category picker:
-    schema = context.user_data.get('schema')
-    keyboard = bot_functions.inline_picker(schema, 'categoria')
-    message = context.bot.send_message(chat_id=update.effective_chat.id, text=msg, 
-        parse_mode=ParseMode.HTML, 
-        reply_markup=InlineKeyboardMarkup(keyboard))
+        msg = f"Segnato produttore '{supplier}'! Ora scrivimi"
+    msg = f"{msg} il nome dettagliato del <b>prodotto</b>. Aggiungi tutte le info necessarie, es.:\n\n<i>Grintuss pediatric sciroppo 12 flaconcini</i>\n\nOppure usa /esci per uscire."
+    message = context.bot.send_message(chat_id=update.effective_chat.id, text=msg, parse_mode=ParseMode.HTML)
     context.user_data["last_sent"] = message.message_id
-    return PROCESS_CATEGORY
+    return PROCESS_PNAME
 
 #ADD 3) process p_name and ask_category:
 def process_pname(update, context):
@@ -588,18 +581,23 @@ def process_pname(update, context):
         return ask_category(update, context, p_name)
 
 #common helper:
-def ask_pieces(update, context, category=None):
+def ask_category(update, context, p_name=None):
     #if caller is edit info:
     if context.user_data.get('to_edit') != None:
-        msg = f""
+        msg = f"Scrivimi"
     else:
-        msg = f"Segnata categoria '{category}'! "
-    msg = f"{msg}Mi dici il <b>numero di pezzi</b> che hai in magazzino?\n\nScrivi solo la <i>cifra</i>, es. 1, 10, ...\n\nOppure usa /esci per uscire."
-    message = context.bot.send_message(chat_id=update.effective_chat.id, text=msg, parse_mode=ParseMode.HTML)
+        msg = f"Segnato nome '{p_name}'! Ora dimmi"
+    msg = f"{msg} a quale <b>categoria</b> appartiene il prodotto (es. cosmesi, alimentazione, ...). Oppure usa /esci per uscire.\n\nNOTA: Se non è fra i suggerimenti, inviami direttamente il nome."
+    #category picker:
+    schema = context.user_data.get('schema')
+    keyboard = bot_functions.inline_picker(schema, 'categoria')
+    message = context.bot.send_message(chat_id=update.effective_chat.id, text=msg, 
+        parse_mode=ParseMode.HTML, 
+        reply_markup=InlineKeyboardMarkup(keyboard))
     context.user_data["last_sent"] = message.message_id
-    return PROCESS_PIECES
+    return PROCESS_CATEGORY
 
-#ADD 4) process category and ask p_name:
+#ADD 4) process category and ask price:
 def process_category(update, context):
     try:
         #IF ALREADY IN DB -> get from query:
@@ -615,7 +613,7 @@ def process_category(update, context):
         if context.user_data.get('to_edit') != None:
             return process_pieces(update, context)
         else:
-            return ask_pieces(update, context, category)
+            return ask_price(update, context, category)
     except:
         #IF NEW -> get from user message:
         category = update.message.text.lower()
@@ -638,9 +636,58 @@ def process_category(update, context):
                 return process_pieces(update, context)
             else:
                 #ask next:
-                return ask_pieces(update, context, category)
+                return ask_price(update, context, category)
 
-#ADD 5) process pieces and show Recap:
+#common helper:
+def ask_price(update, context, category=None):
+    #if caller is edit info:
+    if context.user_data.get('to_edit') != None:
+        msg = f""
+    else:
+        msg = f"Segnata categoria '{category}'! "
+    msg = f"{msg}Qual è il <b>prezzo al pubblico</b> del prodotto?\n"+\
+            f"Scrivi solo la <i>cifra</i> in Euro (es. 10 o 10,50)."
+    message = context.bot.send_message(chat_id=update.effective_chat.id, text=msg,
+        parse_mode=ParseMode.HTML)
+    context.user_data["last_sent"] = message.message_id
+    return PROCESS_PRICE
+
+#ADD 5) process price and ask quantity:
+def process_price(update, context):
+    #store answer from user message:
+    price = update.message.text.strip('€')
+    price = price.replace(',', '.')
+    try:
+        price = float(price)
+    except:
+        msg = "Re-inviami soltanto le cifre del prezzo (es. 10 o 10,50), senza simboli o parole.\n\nOppure usa /esci per uscire."
+        message = context.bot.send_message(chat_id=update.effective_chat.id, text=msg)
+        context.user_data["last_sent"] = message.message_id
+        return PROCESS_PRICE
+
+    #store in bot memory:
+    context.user_data['price'] = price
+    tlog.info(f"Letto prezzo {price:.2f} €.")
+    #if caller is edit info -> return to state Recap:
+    if context.user_data.get('to_edit') != None:
+        return process_pieces(update, context)
+    else:
+        #ask next:
+        return ask_pieces(update, context, price)
+
+#common helper:
+def ask_pieces(update, context, price=None):
+    #if caller is edit info:
+    if context.user_data.get('to_edit') != None:
+        msg = f""
+    else:
+        msg = f"Segnato prezzo {price:.2f}€! "
+    msg = f"{msg}Mi dici il <b>numero di pezzi</b> che hai in magazzino?\n\nScrivi solo la <i>cifra</i>, es. 1, 10, ...\n\nOppure usa /esci per uscire."
+    message = context.bot.send_message(chat_id=update.effective_chat.id, text=msg, parse_mode=ParseMode.HTML)
+    context.user_data["last_sent"] = message.message_id
+    return PROCESS_PIECES
+
+#ADD 6) process quantity and show Recap:
 def process_pieces(update, context):
     #1) check caller function:
     to_edit = context.user_data.get('to_edit')
@@ -663,19 +710,21 @@ def process_pieces(update, context):
         msg = f"Aggiornato. "
     
     #prepare product recap:
-    utts = {
+    info = {
         'p_code': context.user_data['p_code'],
         'supplier': context.user_data['supplier'],
         'p_name': context.user_data['p_name'],
         'category': context.user_data['category'],
+        'price': float(context.user_data['price']),
         'pieces': int(context.user_data['pieces']),
     }
     msg = f"{msg}Ti invio il recap del prodotto:\n"+\
-            f"- Codice: <i>{utts['p_code']}</i>\n"+\
-            f"- Produttore: <i>{utts['supplier']}</i>\n"+\
-            f"- Nome: <i>{utts['p_name']}</i>\n"+\
-            f"- Categoria: <i>{utts['category']}</i>\n"+\
-            f"- Numero di pezzi: <i>{utts['pieces']}</i>\n"+\
+            f"- Codice: <i>{info['p_code']}</i>\n"+\
+            f"- Produttore: <i>{info['supplier']}</i>\n"+\
+            f"- Nome: <i>{info['p_name']}</i>\n"+\
+            f"- Categoria: <i>{info['category']}</i>\n"+\
+            f"- Prezzo: <i>{info['price']:.2f}€</i>\n"+\
+            f"- Numero di pezzi: <i>{info['pieces']}</i>\n"+\
             f"\nPosso salvare nel magazzino?"
     keyboard = [[InlineKeyboardButton('Sì', callback_data='Sì'),
                 InlineKeyboardButton('No', callback_data='No')]]
@@ -685,20 +734,7 @@ def process_pieces(update, context):
     context.user_data["last_sent"] = message.message_id
     return SAVE_EDIT
 
-#common helper:
-def edit_picker(update, context):
-    keyboard = [[InlineKeyboardButton('Produttore', callback_data='Produttore'),
-                InlineKeyboardButton('Nome', callback_data='Nome')],
-                [InlineKeyboardButton('Categoria', callback_data='Categoria'),
-                InlineKeyboardButton('Quantita', callback_data='Quantita')],
-                [InlineKeyboardButton('Esci', callback_data='Esci')]]
-    msg = f"Cosa vuoi modificare?"
-    message = context.bot.send_message(chat_id=update.effective_chat.id, text=msg,
-            reply_markup=InlineKeyboardMarkup(keyboard))
-    context.user_data["last_sent"] = message.message_id
-    return EDIT_INFO
-
-#prodotto - 6) process category and ask_quantity:
+#prodotto - 7) store to DB or go to EDIT:
 def save_to_db(update, context):
     #get open query:
     query = update.callback_query
@@ -717,6 +753,7 @@ def save_to_db(update, context):
             'supplier': context.user_data['supplier'],
             'p_name': context.user_data['p_name'],
             'category': context.user_data['category'],
+            'price': float(context.user_data['price']),
             'pieces': int(context.user_data['pieces']),
         }
         #save to DB:
@@ -738,8 +775,7 @@ def save_to_db(update, context):
     else:
         return edit_picker(update, context)
 
-    
-#prodotto - 7) decide next step to do:
+#prodotto - 8) if no EDIT -> decide next step to do:
 def next_step(update, context):
     #get open query:
     query = update.callback_query
@@ -754,14 +790,7 @@ def next_step(update, context):
 
     #trigger ADD INFO -> start asking the price:
     if choice == "Sì" or choice == "Aggiungi info":
-        #ask price:
-        msg = f"Ti farò una serie di brevi domande. Puoi interrompere quando vuoi cliccando su /esci.\n\n"+\
-                f"1) Qual è il <b>prezzo al pubblico</b> del prodotto?\n"+\
-                f"Scrivi solo la <i>cifra</i> in Euro (es. 10 o 10,50)."
-        message = context.bot.send_message(chat_id=update.effective_chat.id, text=msg,
-            parse_mode=ParseMode.HTML)
-        context.user_data["last_sent"] = message.message_id
-        return PROCESS_PRICE
+        return ask_disp_medico(update, context)
     
     #trigger EXIT:
     elif choice == "No" or choice == "Annulla":
@@ -773,6 +802,21 @@ def next_step(update, context):
     #trigger EDIT INFO:
     else:
         return edit_picker(update, context)
+
+
+#EDIT - common helper:
+def edit_picker(update, context):
+    keyboard = [[InlineKeyboardButton('Produttore', callback_data='Produttore'),
+                InlineKeyboardButton('Nome', callback_data='Nome')],
+                [InlineKeyboardButton('Categoria', callback_data='Categoria'),
+                InlineKeyboardButton('Prezzo', callback_data='Prezzo')],
+                [InlineKeyboardButton('Quantita', callback_data='Quantita'),
+                InlineKeyboardButton('ESCI', callback_data='Esci')]]
+    msg = f"Cosa vuoi modificare?"
+    message = context.bot.send_message(chat_id=update.effective_chat.id, text=msg,
+            reply_markup=InlineKeyboardMarkup(keyboard))
+    context.user_data["last_sent"] = message.message_id
+    return EDIT_INFO
 
 #EDIT:
 def edit_info(update, context):
@@ -790,6 +834,8 @@ def edit_info(update, context):
         return ask_pname(update, context)
     elif choice == 'Categoria':
         return ask_category(update, context)
+    elif choice == 'Prezzo':
+        return ask_price(update, context)
     elif choice == 'Quantita':
         return ask_pieces(update, context)
     else:
@@ -801,38 +847,17 @@ def edit_info(update, context):
 
 
 #ADD EXTRA INFO:
-#extra - 1) save price and ask bool disp medico:
-def process_price(update, context):
-    #store answer from user message:
-    price = update.message.text.strip('€')
-    price = price.replace(',', '.')
-    try:
-        price = float(price)
-    except:
-        msg = "Re-inviami soltanto le cifre del prezzo (es. 10 o 10,50).\n\nOppure usa /esci per uscire."
-        message = context.bot.send_message(chat_id=update.effective_chat.id, text=msg)
-        context.user_data["last_sent"] = message.message_id
-        return PROCESS_PRICE
-
-    #save new data to DB:
-    schema = context.user_data['schema']
-    p_code = context.user_data['p_code']
-    colname = 'prezzo'
-    ret = db_interactor.add_detail(schema, p_code, colname, price)
-    if ret == -1:
-        msg = f"C'è stato un problema col mio DB, ti chiedo scusa!"
-        message = context.bot.send_message(chat_id=update.effective_chat.id, text=msg)
-        context.user_data["last_sent"] = message.message_id
-        return CONV_END
-    else:
-        msg = f"Segnato {price:.2f}€. Prossima:\n\n2) Il prodotto è un <b>dispositivo medico</b>?"
-        keyboard = [[InlineKeyboardButton('Sì', callback_data='Sì'),
-                    InlineKeyboardButton('No', callback_data='No')]]
-        message = context.bot.send_message(chat_id=update.effective_chat.id, text=msg,
-            parse_mode=ParseMode.HTML,
-            reply_markup=InlineKeyboardMarkup(keyboard))
-        context.user_data["last_sent"] = message.message_id
-        return PROCESS_DISP_MEDICO
+#extra - 1) ask bool disp medico:
+def ask_disp_medico(update, context):
+    msg = f"Ti farò una serie di brevi domande. Puoi interrompere quando vuoi cliccando su /esci.\n\n"+\
+            f"1) Il prodotto è un <b>dispositivo medico</b>?"
+    keyboard = [[InlineKeyboardButton('Sì', callback_data='Sì'),
+                InlineKeyboardButton('No', callback_data='No')]]
+    message = context.bot.send_message(chat_id=update.effective_chat.id, text=msg,
+        parse_mode=ParseMode.HTML,
+        reply_markup=InlineKeyboardMarkup(keyboard))
+    context.user_data["last_sent"] = message.message_id
+    return PROCESS_DISP_MEDICO
 
 #extra - 2) save disp_medico and ask min_age:
 def process_disp_medico(update, context):
@@ -854,7 +879,7 @@ def process_disp_medico(update, context):
         context.user_data["last_sent"] = message.message_id
         return CONV_END
     else:
-        msg = f"Segnato {choice}. Prossima:\n\n3) Qual è l'<b>età minima</b> per l'assunzione del prodotto?\n"+\
+        msg = f"Segnato {choice}. Prossima:\n\n2) Qual è l'<b>età minima</b> per l'assunzione del prodotto?\n"+\
                 f"Scrivimi solo l'età <i>in cifre</i> (es. 18, 3, 0, ...)"
         message = context.bot.send_message(chat_id=update.effective_chat.id, text=msg,
             parse_mode=ParseMode.HTML)
@@ -884,7 +909,7 @@ def process_min_age(update, context):
         return CONV_END
     else:
         agestr = "anno" if age == 1 else f"anni"
-        msg = f"Segnato {age} {agestr}. Prossima:\n\n4) Il prodotto è <b>biologico</b>?"
+        msg = f"Segnato {age} {agestr}. Prossima:\n\n3) Il prodotto è <b>biologico</b>?"
         keyboard = [[InlineKeyboardButton('Sì', callback_data='Sì'),
                     InlineKeyboardButton('No', callback_data='No')]]
         message = context.bot.send_message(chat_id=update.effective_chat.id, text=msg,
@@ -913,7 +938,7 @@ def process_bio(update, context):
         context.user_data["last_sent"] = message.message_id
         return CONV_END
     else:
-        msg = f"Segnato {choice}. Prossima:\n\n5) Il prodotto è <b>vegano</b>?"
+        msg = f"Segnato {choice}. Prossima:\n\n4) Il prodotto è <b>vegano</b>?"
         keyboard = [[InlineKeyboardButton('Sì', callback_data='Sì'),
                     InlineKeyboardButton('No', callback_data='No')]]
         message = context.bot.send_message(chat_id=update.effective_chat.id, text=msg,
@@ -942,7 +967,7 @@ def process_vegan(update, context):
         context.user_data["last_sent"] = message.message_id
         return CONV_END
     else:
-        msg = f"Segnato {choice}. Prossima:\n\n6) Il prodotto è <b>senza glutine</b>?"
+        msg = f"Segnato {choice}. Prossima:\n\n5) Il prodotto è <b>senza glutine</b>?"
         keyboard = [[InlineKeyboardButton('Sì', callback_data='Sì'),
                     InlineKeyboardButton('No', callback_data='No')]]
         message = context.bot.send_message(chat_id=update.effective_chat.id, text=msg,
@@ -971,7 +996,7 @@ def process_nogluten(update, context):
         context.user_data["last_sent"] = message.message_id
         return CONV_END
     else:
-        msg = f"Segnato {choice}. Prossima:\n\n7) Il prodotto è <b>senza lattosio</b>?"
+        msg = f"Segnato {choice}. Prossima:\n\n6) Il prodotto è <b>senza lattosio</b>?"
         keyboard = [[InlineKeyboardButton('Sì', callback_data='Sì'),
                     InlineKeyboardButton('No', callback_data='No')]]
         message = context.bot.send_message(chat_id=update.effective_chat.id, text=msg,
@@ -1000,7 +1025,7 @@ def process_nolactose(update, context):
         context.user_data["last_sent"] = message.message_id
         return CONV_END
     else:
-        msg = f"Segnato {choice}. Prossima:\n\n8) Il prodotto è <b>senza zucchero</b>?"
+        msg = f"Segnato {choice}. Prossima:\n\n7) Il prodotto è <b>senza zucchero</b>?"
         keyboard = [[InlineKeyboardButton('Sì', callback_data='Sì'),
                     InlineKeyboardButton('No', callback_data='No')]]
         message = context.bot.send_message(chat_id=update.effective_chat.id, text=msg,
@@ -1038,8 +1063,7 @@ def process_nosugar(update, context):
 #"viste":
 def vista_prodotti(update: Update, context: CallbackContext):
     #reset:
-    end_open_query(update, context)
-    remove_open_keyboards(update, context)
+    reset_priors(update, context)
     #get Schema:
     schema = get_schema(update, context)
     if schema == None:
@@ -1071,8 +1095,7 @@ def default_reply(update: Update, context: CallbackContext):
 #cancel and end:
 def esci(update, context):
     #reset:
-    end_open_query(update, context)
-    remove_open_keyboards(update, context)
+    reset_priors(update, context)
     msg = "Esco. A presto!"
     context.bot.send_message(chat_id=update.effective_chat.id, text=msg)
     return CONV_END
@@ -1080,8 +1103,7 @@ def esci(update, context):
 #error handler: log errors caused by updates:
 def error(update, context):
     #reset:
-    end_open_query(update, context)
-    remove_open_keyboards(update, context)
+    reset_priors(update, context)
     tlog.exception(f"{Exception}")
     #tlog.warning('Update "%s" caused error "%s"', update, context.error)
     msg = f"C'è stato un problema, ti chiedo scusa!"
@@ -1206,6 +1228,10 @@ def main() -> None:
                 CommandHandler('esci', esci),
                 MessageHandler(Filters.regex("^(Esci|esci|Annulla|annulla|Stop|stop)$"), esci),
                 MessageHandler(Filters.text, save_category)],
+            PROCESS_PRICE: [
+                CommandHandler('esci', esci),
+                MessageHandler(Filters.regex("^(Esci|esci|Annulla|annulla|Stop|stop)$"), esci),
+                MessageHandler(Filters.text, process_price)],
             PROCESS_PIECES: [
                 CommandHandler('esci', esci),
                 MessageHandler(Filters.regex("^(Esci|esci|Annulla|annulla|Stop|stop)$"), esci),
@@ -1222,10 +1248,6 @@ def main() -> None:
                 CommandHandler('esci', esci),
                 MessageHandler(Filters.regex("^(Esci|esci|Annulla|annulla|Stop|stop)$"), esci),
                 CallbackQueryHandler(edit_info, pattern='.*')],
-            PROCESS_PRICE: [
-                CommandHandler('esci', esci),
-                MessageHandler(Filters.regex("^(Esci|esci|Annulla|annulla|Stop|stop)$"), esci),
-                MessageHandler(Filters.text, process_price)],
             PROCESS_DISP_MEDICO: [
                 CommandHandler('esci', esci),
                 MessageHandler(Filters.regex("^(Esci|esci|Annulla|annulla|Stop|stop)$"), esci),
