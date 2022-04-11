@@ -10,19 +10,17 @@ from globals import *
 
 #GLOBALS:
 #conversation states:
-START, PICK_WH, SET_AUTH = range(3)
-PROCESS_PCODE, ASK_DISCOUNT, ASK_ALIQUOTA, INIT_ADD, PROCESS_SUPPLIER, SAVE_SUPPLIER, PROCESS_PNAME, PROCESS_CATEGORY, SAVE_CATEGORY, PROCESS_PRICE, PROCESS_PIECES, SAVE_EDIT, NEXT_STEP, EDIT_INFO, PROCESS_DISP_MEDICO, PROCESS_MIN_AGE, PROCESS_BIO, PROCESS_VEGAN, PROCESS_NOGLUTEN, PROCESS_NOLACTOSE, PROCESS_NOSUGAR = range(21)
+START, SET_AUTH = range(2)
+PICK_WH, PROCESS_MENU, PROCESS_PCODE, ASK_DISCOUNT, ASK_ALIQUOTA, INIT_ADD, PROCESS_SUPPLIER, SAVE_SUPPLIER, PROCESS_PNAME, PROCESS_CATEGORY, SAVE_CATEGORY, PROCESS_PRICE, PROCESS_PIECES, SAVE_EDIT, NEXT_STEP, EDIT_INFO, PROCESS_DISP_MEDICO, PROCESS_MIN_AGE, PROCESS_BIO, PROCESS_VEGAN, PROCESS_NOGLUTEN, PROCESS_NOLACTOSE, PROCESS_NOSUGAR = range(23)
 CONV_END = -1 #value of ConversationHandler.END
 
 #default messages:
 ask_register = f"Per poter utilizzare il bot è necessario richiedere l'OTP di accesso relativo alla tua licenza all'amministratore. Quando lo avrai ricevuto, utilizza il comando /registrami per registrarti."
 welcome = f"\n🤖 <b>Lancia un comando per iniziare!</b>"+\
-            f"\n- /start - Scelta magazzino"+\
-            f"\n- /prodotto - Registra o aggiorna un prodotto"+\
-            f"\n- /vista_prodotti - Scarica tabella Prodotti in formato stampa"+\
-            f"\n- /produttore - Registra o aggiorna un produttore e il suo sconto medio sugli ordini"+\
-            f"\n- /categoria - Registra o aggiorna una categoria prodotti e la sua aliquota IVA applicabile"+\
+            f"\n- /aggiorna - Registra nuovo o aggiorna il magazzino"+\
+            f"\n- /vista - Scarica vista del magazzino in formato stampa"+\
             f"\n- /registrami - Registra una nuova autorizzazione"+\
+            f"\n- /start - Scarica autorizzazioni aggiornate"+\
             f"\n- /esci - Annulla l'operazione corrente"
 
 #reset functions:
@@ -44,12 +42,14 @@ def reset_priors(update, context):
     end_open_query(update, context)
     remove_open_keyboards(update, context)
     context.user_data['to_edit'] = None
+    context.user_data['caller'] = None
     context.user_data["NEW_SUPPLIER"] = None
     context.user_data["NEW_CATEGORY"] = None
     context.user_data['Matches'] = None
 
 
-#COMMANDS & HELPERS:
+#COMMANDS & HELPERS
+
 #"/start":
 #start - 1) check & get user auth:
 def start(update, context):
@@ -58,46 +58,23 @@ def start(update, context):
     #check user authorizations:
     chat_id = update.effective_chat.id
     tlog.info(f"/start launched by user: {chat_id}")
+    #download updated user authorizations:
     msg = f"Autenticazione in corso..."
     message = context.bot.send_message(chat_id=chat_id, text=msg)
-    context.user_data["last_sent"] = message.message_id
     auths = db_interactor.get_auths(chat_id)
-    #a) no auths -> user must launch "/registrami" command:
+    context.bot.delete_message(chat_id=chat_id, message_id=message.message_id)
+    #message:
     if auths == []:
         msg = f"Benvenuto! Non conosco il tuo chat ID.\n\n{ask_register}"
         tlog.info(f"New tentative user: {chat_id}")
-        message.edit_text(msg)
-        return CONV_END
-    #b) store authorization for chosen WH:
-    elif len(auths) == 1:
-        schema = auths[0]
-        tlog.info(schema)
-        context.user_data['schema'] = schema
-        msg = f"Ciao, sono Herbie! Benvenuto nel magazzino di <b>{schema}</b>.\n{welcome}"
-        message.edit_text(msg, parse_mode=ParseMode.HTML)
-        return CONV_END
     else:
-        keyboard = []
-        for auth in auths:
-            keyboard.append([InlineKeyboardButton(auth, callback_data=auth)])
-        msg = f"Dimmi quale magazzino usare:"
-        message.edit_text(msg, reply_markup=InlineKeyboardMarkup(keyboard))
-        return PICK_WH
-
-#start - 2) if more auths -> pick a warehouse:
-def pick_wh(update, context):
-    #get pick from open query:
-    query = update.callback_query
-    schema = query.data
-    tlog.info(schema)
-    query.delete_message()
-    query.answer()
-    context.user_data['schema'] = schema
-    msg = f"Ciao, sono Herbie! Benvenuto nel magazzino di <b>{schema}</b>.\n{welcome}"
+        context.user_data['auths'] = auths
+        authlist = ", ".join(auths)
+        msg = f"Ciao, sono Herbie! Sei registrato nei magazzini di:\n<b>{authlist}</b>.\n{welcome}"
+        tlog.info(f"Downloaded updated auths for user: {chat_id}")
     message = context.bot.send_message(chat_id=update.effective_chat.id, text=msg, parse_mode=ParseMode.HTML)
     context.user_data["last_sent"] = message.message_id
     return CONV_END
-
 
 #"/registrami":
 #registrami - 1) ask OTP:
@@ -130,56 +107,140 @@ def set_auth(update: Update, context: CallbackContext):
     else:
         #b) match found -> launch "/start":
         context.user_data['schema'] = schema
-        msg = f"Ciao, sono Herbie! Benvenuto nel magazzino di <b>{schema}</b>.\n{welcome}"
+        msg = f"Ciao, sono Herbie! Benvenuto nel magazzino di <b>{schema.upper()}</b>.\n{welcome}"
         message.edit_text(msg, parse_mode=ParseMode.HTML)
         return CONV_END
 
-
-#HELPER: get previously chosen Schema (from "/start") or get Schema(s) from auths:
+#GET SCHEMA:
+#HELPER: get Schema(s) from DB auths:
 def get_schema(update, context):
-    schema = context.user_data.get('schema')
-    #if "/start" not launched yet:
-    if schema == None:
+    #get user authorizations:
+    chat_id = update.effective_chat.id
+    auths = context.user_data.get('auths')
+    if auths == None:
         #get auths from DB:
-        #check user authorizations:
-        chat_id = update.effective_chat.id
         msg = f"Autenticazione in corso..."
         message = context.bot.send_message(chat_id=chat_id, text=msg)
-        context.user_data["last_sent"] = message.message_id
         auths = db_interactor.get_auths(chat_id)
-        #a) no auths:
-        if auths == []:
-            msg = "Non ho trovato autorizzazioni. Lancia il comando /start per verificare le tue autorizzazioni."
-            message.edit_text(msg)
-            return None
-        #b) one auth only:
-        elif len(auths) == 1:
-            schema = auths[0]
-            context.user_data['schema'] = schema
-            tlog.info(f"Got schema: {schema}")
-            context.bot.delete_message(chat_id=update.effective_chat.id, message_id=message.message_id)
-            return schema
-        #c) more auths (note: admin only, not for normal users):
-        else:
-            msg = "Ho trovato più di un'autorizzazione: lancia il comando /start per scegliere su quale magazzino operare."
-            message.edit_text(msg)
-            return None
-    else:
-        tlog.info(f"Schema: {schema}")
+        context.user_data['auths'] = auths
+        context.bot.delete_message(chat_id=chat_id, message_id=message.message_id)
+
+    #a) no auths:
+    if auths == []:
+        msg = f"Benvenuto! Non conosco il tuo chat ID.\n\n{ask_register}"
+        tlog.info(f"New tentative user: {chat_id}")
+        message = context.bot.send_message(chat_id=chat_id, text=msg)
+        context.user_data["last_sent"] = message.message_id
+        return CONV_END
+    #b) one auth only:
+    elif len(auths) == 1:
+        schema = auths[0]
+        context.user_data['schema'] = schema
+        tlog.info(f"Got schema: {schema}")
         return schema
+    #c) more auths -> get picker:
+    else:
+        keyboard = []
+        for auth in auths:
+            keyboard.append([InlineKeyboardButton(auth, callback_data=auth)])
+        msg = f"📌 Dimmi quale magazzino usare:"
+        message = context.bot.send_message(chat_id=chat_id, text=msg, reply_markup=InlineKeyboardMarkup(keyboard))
+        context.user_data["last_sent"] = message.message_id
+        return PICK_WH
+
+#start - 2) if more auths -> pick a warehouse:
+def pick_wh(update, context):
+    #get pick from open query:
+    query = update.callback_query
+    schema = query.data
+    tlog.info(schema)
+    query.delete_message()
+    query.answer()
+    context.user_data['schema'] = schema
+    return main_menu(update, context, schema)
 
 
-#"/produttore":
+#MAIN MENU:
+#main menu for both "/aggiorna" and "/vista":
+def main_menu(update, context, schema):
+    #keyboard:
+    if context.user_data.get('caller') == 'aggiorna':
+        #/aggiorna:
+        actionstr = f"Cosa vuoi aggiornare?"
+        buttons = ['Prodotto', 'Produttore', 'Categoria', 'Esci']
+    else:
+        #/vista:
+        actionstr = f"Quale vista vuoi estrarre?"
+        buttons = ['Prodotto', 'Produttore', 'Categoria', 'Storico ordini', 'Lista ordini', 'Esci']
+    msg = f"Ciao! Sei nel magazzino di <b>{schema.upper()}</b>.\n\n🤖📦✏ <b>{actionstr}</b>"
+    keyboard = []
+    for button in buttons:
+        keyboard. append([InlineKeyboardButton(button, callback_data=button)])
+    message = context.bot.send_message(chat_id=update.effective_chat.id, text=msg,
+        parse_mode=ParseMode.HTML, reply_markup=InlineKeyboardMarkup(keyboard))
+    context.user_data["last_sent"] = message.message_id
+    return PROCESS_MENU
+
+#process choice after main menu:
+def process_menu(update, context):
+    #get open query:
+    query = update.callback_query
+    choice = query.data
+    tlog.info(choice)
+    query.edit_message_reply_markup(reply_markup=None)
+    query.answer()
+    caller = context.user_data.get('caller')
+    #sorter:
+    if caller == 'aggiorna':
+        if choice == 'Prodotto':
+            return prodotto(update, context)
+        elif choice == 'Produttore':
+            return produttore(update, context)
+        elif choice == 'Categoria':
+            return categoria(update, context)
+        else:
+            msg = f"Ok. A presto!"
+            message = context.bot.send_message(chat_id=update.effective_chat.id, text=msg)
+            context.user_data["last_sent"] = message.message_id
+            return CONV_END
+    else:
+        if choice == 'Prodotto':
+            return vista_prodotti(update, context)
+        else:
+            msg = f"Ok. A presto!"
+            message = context.bot.send_message(chat_id=update.effective_chat.id, text=msg)
+            context.user_data["last_sent"] = message.message_id
+            return CONV_END
+
+#"/aggiorna":
+def aggiorna(update, context):
+    #reset:
+    reset_priors(update, context)
+    #get Schema:
+    context.user_data['caller'] = 'aggiorna'
+    schema = get_schema(update, context)
+    if schema == CONV_END or schema == PICK_WH:
+        return schema
+    else:
+        return main_menu(update, context, schema)
+
+#"/vista":
+def vista(update, context):
+    #reset:
+    reset_priors(update, context)
+    #get Schema:
+    context.user_data['caller'] = 'vista'
+    schema = get_schema(update, context)
+    if schema == CONV_END or schema == PICK_WH:
+        return schema
+    else:
+        return main_menu(update, context, schema)
+
+
+#PRODUTTORE:
 #produttore - 1) ask name of new supplier:
 def produttore(update, context):
-    #reset:
-    end_open_query(update, context)
-    remove_open_keyboards(update, context)
-    #get Schema:
-    schema = get_schema(update, context)
-    if schema == None:
-        return CONV_END
-    msg = f"Ciao! Registriamo un nuovo produttore, o aggiorniamone lo sconto medio sugli ordini, nel magazzino <b>{schema}</b>.\n\n"+\
+    msg = f"Registriamo un nuovo <b>produttore</b>, o aggiorniamone lo sconto medio sugli ordini.\n\n"+\
             f"Inviami il nome del produttore. Oppure usa /esci per uscire."
     message = context.bot.send_message(chat_id=update.effective_chat.id, text=msg,
         parse_mode=ParseMode.HTML)
@@ -238,17 +299,10 @@ def save_supplier(update, context):
         return CONV_END
 
 
-#"/categoria":
+#"CATEGORIA":
 #categoria - 1) ask name of new supplier:
 def categoria(update, context):
-    #reset:
-    end_open_query(update, context)
-    remove_open_keyboards(update, context)
-    #get Schema:
-    schema = get_schema(update, context)
-    if schema == None:
-        return CONV_END
-    msg = f"Ciao! Registriamo una nuova categoria prodotti, o aggiorniamone l'aliquota IVA, nel magazzino <b>{schema}</b>.\n\n"+\
+    msg = f"Registriamo una nuova <b>categoria</b> prodotti, o aggiorniamone l'aliquota IVA.\n\n"+\
             f"Inviami il nome della categoria. Oppure usa /esci per uscire."
     message = context.bot.send_message(chat_id=update.effective_chat.id, text=msg,
         parse_mode=ParseMode.HTML)
@@ -312,14 +366,7 @@ def save_category(update, context):
 #"/prodotto":
 #prodotto - 1) ask p_code mode: text or photo:
 def prodotto(update, context):
-    #reset:
-    end_open_query(update, context)
-    remove_open_keyboards(update, context)
-    #get Schema:
-    schema = get_schema(update, context)
-    if schema == None:
-        return CONV_END
-    msg = f"Ciao! Sei nel magazzino <b>{schema}</b>.\n\nPer iniziare, devo <b>identificare un prodotto</b>. Puoi:\n"+\
+    msg = f"Per iniziare, devo <b>identificare un prodotto</b>. Puoi:\n"+\
             f"- Inviarmi una <b>FOTO</b> del codice a barre, oppure\n"+\
             f"- Inviarmi il <b>NOME</b> del prodotto, oppure\n"+\
             f"- Trascrivermi il codice a barre via <b>TESTO</b> (SENZA spazi)."
@@ -1062,14 +1109,8 @@ def process_nosugar(update, context):
 
 #"viste":
 def vista_prodotti(update: Update, context: CallbackContext):
-    #reset:
-    reset_priors(update, context)
-    #get Schema:
-    schema = get_schema(update, context)
-    if schema == None:
-        return CONV_END
-    
     #get view:
+    schema = context.user_data.get('schema')
     filename = './data_cache/prodotti.xlsx'
     ret = bot_functions.create_view_prodotti(schema, filename)
     if ret == 0:
@@ -1120,24 +1161,9 @@ def main() -> None:
     dispatcher = updater.dispatcher
 
     #command handlers:
-    dispatcher.add_handler(CommandHandler("vista_prodotti", vista_prodotti))
+    dispatcher.add_handler(CommandHandler('start', start))
 
     #conversation handlers:
-    #/start":
-    conv_handler = ConversationHandler(
-        entry_points=[
-            CommandHandler('start', start),
-            MessageHandler(Filters.regex("^(Start|start)$"), start)],
-        states={
-            PICK_WH: [
-                CommandHandler('esci', esci),
-                MessageHandler(Filters.regex("^(Esci|esci|Annulla|annulla|Stop|stop)$"), esci),
-                CallbackQueryHandler(pick_wh, pattern='.*')],
-        },
-        fallbacks=[CommandHandler('error', error)],
-        allow_reentry=True)
-    dispatcher.add_handler(conv_handler)
-
     #/registrami:
     conv_handler = ConversationHandler(
         entry_points=[
@@ -1153,50 +1179,20 @@ def main() -> None:
         allow_reentry=True)
     dispatcher.add_handler(conv_handler)
 
-    #/produttore":
+    #"/aggiorna":
     conv_handler = ConversationHandler(
         entry_points=[
-            CommandHandler('produttore', produttore),
-            MessageHandler(Filters.regex("^(Produttore|produttore)$"), produttore)],
+                CommandHandler('aggiorna', aggiorna),
+                MessageHandler(Filters.regex("^(Aggiorna|aggiorna)$"), prodotto)],
         states={
-            ASK_DISCOUNT: [
+            PICK_WH: [
                 CommandHandler('esci', esci),
                 MessageHandler(Filters.regex("^(Esci|esci|Annulla|annulla|Stop|stop)$"), esci),
-                MessageHandler(Filters.text, ask_discount)],
-            SAVE_SUPPLIER: [
+                CallbackQueryHandler(pick_wh, pattern='.*')],
+            PROCESS_MENU: [
                 CommandHandler('esci', esci),
                 MessageHandler(Filters.regex("^(Esci|esci|Annulla|annulla|Stop|stop)$"), esci),
-                MessageHandler(Filters.text, save_supplier)],
-        },
-        fallbacks=[CommandHandler('error', error)],
-        allow_reentry=True)
-    dispatcher.add_handler(conv_handler)
-
-    #/categoria":
-    conv_handler = ConversationHandler(
-        entry_points=[
-            CommandHandler('categoria', categoria),
-            MessageHandler(Filters.regex("^(Categoria|categoria)$"), categoria)],
-        states={
-            ASK_ALIQUOTA: [
-                CommandHandler('esci', esci),
-                MessageHandler(Filters.regex("^(Esci|esci|Annulla|annulla|Stop|stop)$"), esci),
-                MessageHandler(Filters.text, ask_aliquota)],
-            SAVE_CATEGORY: [
-                CommandHandler('esci', esci),
-                MessageHandler(Filters.regex("^(Esci|esci|Annulla|annulla|Stop|stop)$"), esci),
-                MessageHandler(Filters.text, save_category)],
-        },
-        fallbacks=[CommandHandler('error', error)],
-        allow_reentry=True)
-    dispatcher.add_handler(conv_handler)
-
-    #add new product ("/nuovo"):
-    conv_handler = ConversationHandler(
-        entry_points=[
-                CommandHandler('prodotto', prodotto),
-                MessageHandler(Filters.regex("^(Prodotto|prodotto)$"), prodotto)],
-        states={
+                CallbackQueryHandler(process_menu, pattern='.*')],
             PROCESS_PCODE: [
                 CommandHandler('esci', esci),
                 MessageHandler(Filters.regex("^(Esci|esci|Annulla|annulla|Stop|stop)$"), esci),
@@ -1276,6 +1272,25 @@ def main() -> None:
                 CommandHandler('esci', esci),
                 MessageHandler(Filters.regex("^(Esci|esci|Annulla|annulla|Stop|stop)$"), esci),
                 CallbackQueryHandler(process_nosugar, pattern='.*')],
+        },
+        fallbacks=[CommandHandler('error', error)],
+        allow_reentry=True)
+    dispatcher.add_handler(conv_handler)
+    
+    #/vista:
+    conv_handler = ConversationHandler(
+        entry_points=[
+            CommandHandler('vista', vista),
+            MessageHandler(Filters.regex("^(Vista|vista)$"), vista)],
+        states={
+            PICK_WH: [
+                CommandHandler('esci', esci),
+                MessageHandler(Filters.regex("^(Esci|esci|Annulla|annulla|Stop|stop)$"), esci),
+                CallbackQueryHandler(pick_wh, pattern='.*')],
+            PROCESS_MENU: [
+                CommandHandler('esci', esci),
+                MessageHandler(Filters.regex("^(Esci|esci|Annulla|annulla|Stop|stop)$"), esci),
+                CallbackQueryHandler(process_menu, pattern='.*')],
         },
         fallbacks=[CommandHandler('error', error)],
         allow_reentry=True)
