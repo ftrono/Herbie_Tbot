@@ -101,10 +101,10 @@ def create_view_prodotti(schema, filename):
             writer.save()
         return 0
     except Exception:
-        tlog.exception(f"Export error for xsls Prodotti. {Exception}")
+        tlog.exception(f"Export error for xslx Prodotti for schema {schema}. {Exception}")
         return -1
 
-#views by produttore & categoria:
+#view Recap by produttore & categoria:
 def create_view_recap(schema, filename):
     headers = {'Produttore': 'produttore', 'Categoria': 'categoria', 'Sconto Medio %': 'scontomedio', 'IVA %': 'aliquota', 'Quantita': 'quantita', 'Costo Giacenze €': 'costototale', 'Valore Giacenze €': 'valoretotale'}
     #export table to pdf:
@@ -154,5 +154,111 @@ def create_view_recap(schema, filename):
             writer.save()
         return 0
     except Exception:
-        tlog.exception(f"Export error for Recap xsls of schema {schema}. {Exception}")
+        tlog.exception(f"Export error for xslx Recap for schema {schema}. {Exception}")
+        return -1
+
+#view ListaOrdine by produttore or codiceord:
+def create_view_listaordine(schema, filename, supplier=None, codiceord=None):
+    if not supplier and not codiceord:
+        tlog.error(f"create_view_listaordine() needs either a supplier or an order code.")
+        return -1
+    headers = {'Codice Prodotto': 'codiceprod', 'Produttore': 'produttore', 'Nome': 'nome', 'Categoria': 'categoria', 'Quantita Ordine': 'quantita', 'Prezzo Pubblico €': 'prezzo', 'Sconto Medio %': 'scontomedio', 'IVA %': 'aliquota', 'Costo Acquisto €': 'costoacquisto', 'Costo Totale €': 'costototale', 'Valore Totale €': 'valoretotale'}
+    #export table to pdf:
+    try:
+        ListaOrdine = db_interactor.get_view_listaordine(schema, supplier=supplier, codiceord=codiceord)
+        if ListaOrdine.empty == False:
+            #1) format adjustments:
+            Vista = pd.DataFrame(columns=headers.keys())
+            for col in Vista.columns:
+                if col == 'Codice Prodotto':
+                    Vista[col] = [str(p_code) for p_code in ListaOrdine[headers[col]]]
+                elif col in ['Sconto Medio %', 'IVA %']:
+                    Vista[col] = ListaOrdine[headers[col]]/100
+                elif col == 'Costo Acquisto €':
+                    #calculate unit cost and total cost from available data:
+                    temp_cost = []
+                    temp_totcost = []
+                    temp_totprice = []
+                    for ind in ListaOrdine.index:
+                        #unit cost:
+                        discount = ListaOrdine['prezzo'].iloc[ind] * (ListaOrdine['scontomedio'].iloc[ind]/100)
+                        cost = ListaOrdine['prezzo'].iloc[ind] - discount
+                        cost = cost + (cost * (ListaOrdine['aliquota'].iloc[ind]/100))
+                        temp_cost.append(cost)
+                        #total cost:
+                        totcost = cost * ListaOrdine['quantita'].iloc[ind]
+                        temp_totcost.append(totcost)
+                        #total price:
+                        totprice = ListaOrdine['prezzo'].iloc[ind] * ListaOrdine['quantita'].iloc[ind]
+                        temp_totprice.append(totprice)
+                    Vista[col] = temp_cost
+                elif col == 'Costo Totale €':
+                    #populate column with the inventory value (at cost) already calculated:
+                    Vista[col] = temp_totcost
+                elif col == 'Valore Totale €':
+                    #populate column with the inventory value (at cost) already calculated:
+                    Vista[col] = temp_totprice
+                else:
+                    Vista[col] = ListaOrdine[headers[col]]
+            
+            #add grand totals row:
+            Vista = Vista.append({col:'-' for col in Vista.columns}, ignore_index=True)
+            Vista['Codice Prodotto'].iloc[-1] = 'TOTALE'
+            Vista['Quantita Ordine'].iloc[-1] = ListaOrdine['quantita'].sum()
+            Vista['Costo Totale €'].iloc[-1] = sum(temp_totcost)
+            Vista['Valore Totale €'].iloc[-1] = sum(temp_totprice)
+            Vista.reset_index(drop=True, inplace=True)
+
+            #2) export:
+            #load Pandas Excel exporter:
+            writer = pd.ExcelWriter(filename)
+            Vista.to_excel(writer, sheet_name=schema, index=False, na_rep='')
+            workbook  = writer.book
+            fmt_price = workbook.add_format({'num_format': '#,##0.00'})
+            fmt_pct = workbook.add_format({'num_format': '0%'})
+            #auto-adjust columns' width:
+            for column in Vista:
+                column_width = max(Vista[column].astype(str).map(len).max(), len(column))
+                col_idx = Vista.columns.get_loc(column)
+                if column in ['Prezzo Pubblico €', 'Costo Acquisto €', 'Costo Totale €', 'Valore Totale €']:
+                    writer.sheets[schema].set_column(first_col=col_idx, last_col=col_idx, width=column_width, cell_format=fmt_price)
+                elif column in ['Sconto Medio %', 'IVA %']:
+                    writer.sheets[schema].set_column(first_col=col_idx, last_col=col_idx, width=column_width, cell_format=fmt_pct)
+                else:
+                    writer.sheets[schema].set_column(first_col=col_idx, last_col=col_idx, width=column_width)
+            writer.save()
+        return 0
+    except Exception:
+        tlog.exception(f"Export error for xslx ListaOrdine {codiceord if codiceord else supplier} for schema {schema}. {Exception}")
+        return -1
+
+#view StoricoOrdini:
+def create_view_storicoordini(schema, filename):
+    headers = {'Codice Ordine': 'codiceord', 'Produttore': 'produttore', 'Riferimento': 'riferimento', 'Data Modifica': 'datamodifica', 'Data Inoltro': 'datainoltro', 'Data Ricezione': 'dataricezione'}
+    #export table to pdf:
+    try:
+        Storico = db_interactor.get_view_storicoordini(schema)
+        if Storico.empty == False:
+            #1) format adjustments:
+            Vista = pd.DataFrame(columns=headers.keys())
+            for col in Vista.columns:
+                if col == 'Codice Ordine':
+                    Vista[col] = [str(p_code) for p_code in Storico[headers[col]]]
+                else:
+                    Vista[col] = Storico[headers[col]]
+            Vista.reset_index(drop=True, inplace=True)
+
+            #2) export:
+            #load Pandas Excel exporter:
+            writer = pd.ExcelWriter(filename)
+            Vista.to_excel(writer, sheet_name=schema, index=False, na_rep='')
+            #auto-adjust columns' width:
+            for column in Vista:
+                column_width = max(Vista[column].astype(str).map(len).max(), len(column))
+                col_idx = Vista.columns.get_loc(column)
+                writer.sheets[schema].set_column(first_col=col_idx, last_col=col_idx, width=column_width)
+            writer.save()
+        return 0
+    except Exception:
+        tlog.exception(f"Export error for xslx StoricoOrdini for schema {schema}. {Exception}")
         return -1

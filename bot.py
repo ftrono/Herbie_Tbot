@@ -861,7 +861,6 @@ def save_to_db(update, context):
     #get open query:
     choice = answer_query(update, context)
     tlog.info(choice)
-    err = False
 
     #trigger STORE TO DB:
     if choice == 'Sì':
@@ -1171,6 +1170,17 @@ def get_vista(update, context, choice):
         ret = bot_functions.create_view_prodotti(schema, filename)
     elif choice == 'recap':
         ret = bot_functions.create_view_recap(schema, filename)
+    elif choice == 'storico ordini':
+        ret = bot_functions.create_view_storicoordini(schema, filename)
+    elif choice == 'lista ordine':
+        ret = bot_functions.create_view_listaordine(schema, filename, supplier="aboca")
+    else:
+        context.bot.delete_message(chat_id=update.effective_chat.id, message_id=message.message_id)
+        msg = f"Ok. A presto!"
+        message = context.bot.send_message(chat_id=update.effective_chat.id, text=msg)
+        context.user_data["last_sent"] = message.message_id
+        return CONV_END
+        
     context.bot.delete_message(chat_id=update.effective_chat.id, message_id=message.message_id)
     if ret == 0:
         #3) send file to user:
@@ -1182,7 +1192,7 @@ def get_vista(update, context, choice):
         msg = f"C'è stato un problema col mio DB, ti chiedo scusa!"
         message = context.bot.send_message(chat_id=update.effective_chat.id, text=msg)
         context.user_data["last_sent"] = message.message_id
-
+        return CONV_END
 
 #GENERIC HANDLERS:
 #default reply:
