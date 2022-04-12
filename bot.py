@@ -10,8 +10,12 @@ from globals import *
 
 #GLOBALS:
 #conversation states:
-START, SET_AUTH = range(2)
-PICK_WH, PROCESS_MENU, PROCESS_PCODE, ASK_DISCOUNT, ASK_ALIQUOTA, INIT_ADD, PROCESS_SUPPLIER, SAVE_SUPPLIER, PROCESS_PNAME, PROCESS_CATEGORY, SAVE_CATEGORY, PROCESS_PRICE, PROCESS_PIECES, SAVE_EDIT, NEXT_STEP, EDIT_INFO, PROCESS_DISP_MEDICO, PROCESS_MIN_AGE, PROCESS_BIO, PROCESS_VEGAN, PROCESS_NOGLUTEN, PROCESS_NOLACTOSE, PROCESS_NOSUGAR, CLEAN_DB = range(24)
+START, SET_AUTH = range(0, 2)
+PICK_WH, PROCESS_MENU, PROCESS_PCODE, ASK_DISCOUNT, ASK_ALIQUOTA = range(0, 5)
+INIT_ADD, PROCESS_SUPPLIER, SAVE_SUPPLIER, PROCESS_PNAME, PROCESS_CATEGORY = range(5, 10)
+SAVE_CATEGORY, PROCESS_PRICE, PROCESS_PIECES, SAVE_EDIT, NEXT_STEP = range(10, 15)
+EDIT_INFO, PROCESS_DISP_MEDICO, PROCESS_MIN_AGE, PROCESS_BIO, PROCESS_VEGAN = range(15, 20)
+PROCESS_NOGLUTEN, PROCESS_NOLACTOSE, PROCESS_NOSUGAR, CLEAN_DB = range(20, 24)
 CONV_END = -1 #value of ConversationHandler.END
 
 #default messages:
@@ -27,6 +31,7 @@ welcome = f"\n🤖 <b>Lancia un comando per iniziare!</b>"+\
 def end_open_query(update, context):
     try:
         update.callback_query.answer()
+        context.user_data['last_answered'] = update.update_id
     except:
         pass
 
@@ -46,6 +51,18 @@ def reset_priors(update, context):
     context.user_data["NEW_SUPPLIER"] = None
     context.user_data["NEW_CATEGORY"] = None
     context.user_data['Matches'] = None
+
+def answer_query(update, context, delete=False):
+    #get open query:
+    query = update.callback_query
+    choice = query.data
+    if delete == True:
+        query.delete_message()
+    else:
+        query.edit_message_reply_markup(reply_markup=None)
+    context.user_data['last_answered'] = update.update_id
+    query.answer()
+    return choice
 
 
 #COMMANDS & HELPERS
@@ -70,7 +87,7 @@ def start(update, context):
     else:
         context.user_data['auths'] = auths
         authlist = ", ".join(auths)
-        msg = f"Ciao, sono Herbie! Sei registrato nei magazzini di:\n<b>{authlist}</b>.\n{welcome}"
+        msg = f"Ciao, sono Herbie! Sei registrato nei magazzini di:\n<b>{authlist.upper()}</b>.\n{welcome}"
         tlog.info(f"Downloaded updated auths for user: {chat_id}")
     message = context.bot.send_message(chat_id=update.effective_chat.id, text=msg, parse_mode=ParseMode.HTML)
     context.user_data["last_sent"] = message.message_id
@@ -151,11 +168,8 @@ def get_schema(update, context):
 #start - 2) if more auths -> pick a warehouse:
 def pick_wh(update, context):
     #get pick from open query:
-    query = update.callback_query
-    schema = query.data
+    schema = answer_query(update, context, delete=True)
     tlog.info(schema)
-    query.delete_message()
-    query.answer()
     context.user_data['schema'] = schema
     return main_menu(update, context, schema)
 
@@ -184,11 +198,8 @@ def main_menu(update, context, schema):
 #process choice after main menu:
 def process_menu(update, context):
     #get open query:
-    query = update.callback_query
-    choice = query.data
+    choice = answer_query(update, context)
     tlog.info(choice)
-    query.edit_message_reply_markup(reply_markup=None)
-    query.answer()
     caller = context.user_data.get('caller')
     #sorter:
     if caller == 'aggiorna':
@@ -257,11 +268,8 @@ def ask_clean(update, context):
 #pulisci - 2) perform cleaning:
 def pulisci(update, context):
     #get open query:
-    query = update.callback_query
-    choice = query.data
+    choice = answer_query(update, context)
     tlog.info(choice)
-    query.edit_message_reply_markup(reply_markup=None)
-    query.answer()
     if choice == 'No':
         msg = f"Ok. A presto!"
         message = context.bot.send_message(chat_id=update.effective_chat.id, text=msg)
@@ -574,11 +582,8 @@ def process_pcode(update, context):
 #ADD 1) init:
 def init_add(update, context):
     #get open query:
-    query = update.callback_query
-    choice = query.data
+    choice = answer_query(update, context)
     tlog.info(choice)
-    query.edit_message_reply_markup(reply_markup=None)
-    query.answer()
     if choice == 'No':
         msg = f"Ok. A presto!"
         message = context.bot.send_message(chat_id=update.effective_chat.id, text=msg)
@@ -608,11 +613,7 @@ def ask_supplier(update, context):
 def process_supplier(update, context):
     try:
         #IF ALREADY IN DB -> get from query:
-        query = update.callback_query
-        supplier = query.data
-        tlog.info(supplier)
-        query.edit_message_reply_markup(reply_markup=None)
-        query.answer()
+        supplier = answer_query(update, context)
         tlog.info(f"Letto produttore {supplier}.")
         context.user_data['supplier'] = supplier
         #ask next:
@@ -694,11 +695,7 @@ def ask_category(update, context, p_name=None):
 def process_category(update, context):
     try:
         #IF ALREADY IN DB -> get from query:
-        query = update.callback_query
-        category = query.data
-        tlog.info(category)
-        query.edit_message_reply_markup(reply_markup=None)
-        query.answer()
+        category = answer_query(update, context)
         tlog.info(f"Letta categoria {category}.")
         context.user_data['category'] = category
         #ask next:
@@ -830,11 +827,8 @@ def process_pieces(update, context):
 #prodotto - 7) store to DB or go to EDIT:
 def save_to_db(update, context):
     #get open query:
-    query = update.callback_query
-    choice = query.data
+    choice = answer_query(update, context)
     tlog.info(choice)
-    query.edit_message_reply_markup(reply_markup=None)
-    query.answer()
     err = False
 
     #trigger STORE TO DB:
@@ -871,11 +865,8 @@ def save_to_db(update, context):
 #prodotto - 8) if no EDIT -> decide next step to do:
 def next_step(update, context):
     #get open query:
-    query = update.callback_query
-    choice = query.data
+    choice = answer_query(update, context)
     tlog.info(choice)
-    query.edit_message_reply_markup(reply_markup=None)
-    query.answer()
 
     #"next_step" is called either by:
     # - process_pcode() -> asks options "Edit info", "Add info", "Cancel"
@@ -914,12 +905,9 @@ def edit_picker(update, context):
 #EDIT:
 def edit_info(update, context):
     #get open query:
-    query = update.callback_query
-    choice = query.data
+    choice = answer_query(update, context, delete=True)
     tlog.info(choice)
     context.user_data['to_edit'] = choice
-    query.delete_message()
-    query.answer()
     #sorter:
     if choice == 'Produttore':
         return ask_supplier(update, context)
@@ -955,11 +943,8 @@ def ask_disp_medico(update, context):
 #extra - 2) save disp_medico and ask min_age:
 def process_disp_medico(update, context):
     #get answer from open query:
-    query = update.callback_query
-    choice = query.data
+    choice = answer_query(update, context)
     tlog.info(choice)
-    query.edit_message_reply_markup(reply_markup=None)
-    query.answer()
     #save new data to DB:
     schema = context.user_data['schema']
     p_code = context.user_data['p_code']
@@ -1014,11 +999,8 @@ def process_min_age(update, context):
 #extra - 4) save bio and ask bool vegan:
 def process_bio(update, context):
     #get answer from open query:
-    query = update.callback_query
-    choice = query.data
+    choice = answer_query(update, context)
     tlog.info(choice)
-    query.edit_message_reply_markup(reply_markup=None)
-    query.answer()
     #save new data to DB:
     schema = context.user_data['schema']
     p_code = context.user_data['p_code']
@@ -1043,11 +1025,8 @@ def process_bio(update, context):
 #extra - 5) save vegan and ask bool nogluten:
 def process_vegan(update, context):
     #get answer from open query:
-    query = update.callback_query
-    choice = query.data
+    choice = answer_query(update, context)
     tlog.info(choice)
-    query.edit_message_reply_markup(reply_markup=None)
-    query.answer()
     #save new data to DB:
     schema = context.user_data['schema']
     p_code = context.user_data['p_code']
@@ -1072,11 +1051,8 @@ def process_vegan(update, context):
 #extra - 6) save nogluten and ask bool nolactose:
 def process_nogluten(update, context):
     #get answer from open query:
-    query = update.callback_query
-    choice = query.data
+    choice = answer_query(update, context)
     tlog.info(choice)
-    query.edit_message_reply_markup(reply_markup=None)
-    query.answer()
     #save new data to DB:
     schema = context.user_data['schema']
     p_code = context.user_data['p_code']
@@ -1101,11 +1077,8 @@ def process_nogluten(update, context):
 #extra - 7) save nolactose and ask bool nosugar:
 def process_nolactose(update, context):
     #get answer from open query:
-    query = update.callback_query
-    choice = query.data
+    choice = answer_query(update, context)
     tlog.info(choice)
-    query.edit_message_reply_markup(reply_markup=None)
-    query.answer()
     #save new data to DB:
     schema = context.user_data['schema']
     p_code = context.user_data['p_code']
@@ -1130,11 +1103,8 @@ def process_nolactose(update, context):
 #extra - 8) save nosugar and end:
 def process_nosugar(update, context):
     #get answer from open query:
-    query = update.callback_query
-    choice = query.data
+    choice = answer_query(update, context)
     tlog.info(choice)
-    query.edit_message_reply_markup(reply_markup=None)
-    query.answer()
     #save new data to DB:
     schema = context.user_data['schema']
     p_code = context.user_data['p_code']
