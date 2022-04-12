@@ -11,7 +11,7 @@ from globals import *
 #GLOBALS:
 #conversation states:
 START, SET_AUTH = range(2)
-PICK_WH, PROCESS_MENU, PROCESS_PCODE, ASK_DISCOUNT, ASK_ALIQUOTA, INIT_ADD, PROCESS_SUPPLIER, SAVE_SUPPLIER, PROCESS_PNAME, PROCESS_CATEGORY, SAVE_CATEGORY, PROCESS_PRICE, PROCESS_PIECES, SAVE_EDIT, NEXT_STEP, EDIT_INFO, PROCESS_DISP_MEDICO, PROCESS_MIN_AGE, PROCESS_BIO, PROCESS_VEGAN, PROCESS_NOGLUTEN, PROCESS_NOLACTOSE, PROCESS_NOSUGAR = range(23)
+PICK_WH, PROCESS_MENU, PROCESS_PCODE, ASK_DISCOUNT, ASK_ALIQUOTA, INIT_ADD, PROCESS_SUPPLIER, SAVE_SUPPLIER, PROCESS_PNAME, PROCESS_CATEGORY, SAVE_CATEGORY, PROCESS_PRICE, PROCESS_PIECES, SAVE_EDIT, NEXT_STEP, EDIT_INFO, PROCESS_DISP_MEDICO, PROCESS_MIN_AGE, PROCESS_BIO, PROCESS_VEGAN, PROCESS_NOGLUTEN, PROCESS_NOLACTOSE, PROCESS_NOSUGAR, CLEAN_DB = range(24)
 CONV_END = -1 #value of ConversationHandler.END
 
 #default messages:
@@ -167,7 +167,7 @@ def main_menu(update, context, schema):
     if context.user_data.get('caller') == 'aggiorna':
         #/aggiorna:
         actionstr = f"Cosa vuoi aggiornare?"
-        buttons = ['Prodotto', 'Produttore', 'Categoria', 'Esci']
+        buttons = ['Prodotto', 'Produttore', 'Categoria', 'Pulisci magazzino', 'Esci']
     else:
         #/vista:
         actionstr = f"Quale vista vuoi estrarre?"
@@ -198,6 +198,8 @@ def process_menu(update, context):
             return produttore(update, context)
         elif choice == 'Categoria':
             return categoria(update, context)
+        elif choice == 'Pulisci magazzino':
+            return ask_clean(update, context)
         else:
             msg = f"Ok. A presto!"
             message = context.bot.send_message(chat_id=update.effective_chat.id, text=msg)
@@ -236,6 +238,50 @@ def vista(update, context):
     else:
         return main_menu(update, context, schema)
 
+#CLEAN DB:
+#pulisci - 1) ask confirmation:
+def ask_clean(update, context):
+    #reset:
+    reset_priors(update, context)
+    chat_id = update.effective_chat.id
+    schema = context.user_data.get('schema')
+    msg = f"<b>Pulizia magazzino:</b>\nIl comando rimuoverà dal magazzino virtuale tutti i prodotti che hanno zero pezzi e tutti i produttori e le categorie prodotto non utilizzate. Sarà necessario reinserirle in futuro se dovessero servire.\n\nSei sicuro di voler procedere?"
+    keyboard = [[InlineKeyboardButton('Sì', callback_data='Sì'),
+                InlineKeyboardButton('No', callback_data='No')]]
+    message = context.bot.send_message(chat_id=update.effective_chat.id, text=msg,
+        parse_mode=ParseMode.HTML,
+        reply_markup=InlineKeyboardMarkup(keyboard))
+    context.user_data["last_sent"] = message.message_id
+    return CLEAN_DB
+
+#pulisci - 2) perform cleaning:
+def pulisci(update, context):
+    #get open query:
+    query = update.callback_query
+    choice = query.data
+    tlog.info(choice)
+    query.edit_message_reply_markup(reply_markup=None)
+    query.answer()
+    if choice == 'No':
+        msg = f"Ok. A presto!"
+        message = context.bot.send_message(chat_id=update.effective_chat.id, text=msg)
+        context.user_data["last_sent"] = message.message_id
+        return CONV_END
+    else:
+        #clean:
+        chat_id = update.effective_chat.id
+        schema = context.user_data.get('schema')
+        tlog.info(f"DB cleaning launched by user: {chat_id} on schema: {schema}")
+        msg = f"Pulizia in corso..."
+        message = context.bot.send_message(chat_id=chat_id, text=msg)
+        ret = db_interactor.clean_db(schema)
+        if ret == 0:
+            msg = f"Pulizia del magazzino {schema} completata! Ho eliminato i prodotti con zero pezzi e i produttori/categorie non utilizzati."
+            message.edit_text(msg)
+        else:
+            msg = f"C'è stato un problema, ti chiedo scusa! Pulizia del magazzino {schema} non completata."
+            message.edit_text(msg)
+        return CONV_END
 
 #PRODUTTORE:
 #produttore - 1) ask name of new supplier:
@@ -1111,7 +1157,7 @@ def process_nosugar(update, context):
 def vista_prodotti(update: Update, context: CallbackContext):
     #get view:
     schema = context.user_data.get('schema')
-    filename = './data_cache/prodotti.xlsx'
+    filename = f'./data_cache/{schema}.prodotti.xlsx'
     ret = bot_functions.create_view_prodotti(schema, filename)
     if ret == 0:
         #3) send file to user:
@@ -1272,6 +1318,10 @@ def main() -> None:
                 CommandHandler('esci', esci),
                 MessageHandler(Filters.regex("^(Esci|esci|Annulla|annulla|Stop|stop)$"), esci),
                 CallbackQueryHandler(process_nosugar, pattern='.*')],
+            CLEAN_DB: [
+                CommandHandler('esci', esci),
+                MessageHandler(Filters.regex("^(Esci|esci|Annulla|annulla|Stop|stop)$"), esci),
+                CallbackQueryHandler(pulisci, pattern='.*')],
         },
         fallbacks=[CommandHandler('error', error)],
         allow_reentry=True)
