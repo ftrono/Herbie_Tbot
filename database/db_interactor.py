@@ -286,9 +286,21 @@ def get_view_prodotti(schema, supplier=None):
         conn, cursor = db_connect()
         if supplier:
             suppstr = f"WHERE produttore = {supplier}"
-        query = f"SELECT prodotti.*, produttori.scontomedio, categorie.aliquota FROM {schema}.prodotti INNER JOIN {schema}.produttori ON prodotti.produttore = produttori.produttore INNER JOIN {schema}.categorie ON prodotti.categoria = categorie.categoria {suppstr}"
+        query = f"SELECT prodotti.*, produttori.scontomedio, categorie.aliquota FROM {schema}.prodotti INNER JOIN {schema}.produttori ON prodotti.produttore = produttori.produttore INNER JOIN {schema}.categorie ON prodotti.categoria = categorie.categoria {suppstr} ORDER BY prodotti.produttore, prodotti.categoria, prodotti.nome"
         FullList = pd.read_sql(query, conn)
         db_disconnect(conn, cursor)
     except psycopg2.Error as e:
         dlog.error(f"Unable to perform get view prodotti for supplier: {supplier if supplier else 'all'}. {e}")
     return FullList
+
+#get Recap view from DB:
+def get_view_recap(schema):
+    Recap = pd.DataFrame()
+    try:
+        conn, cursor = db_connect()
+        query = f"SELECT produttori.produttore, categorie.categoria, SUM(prodotti.quantita) AS quantita, SUM(prodotti.valoretotale) AS valoretotale, produttori.scontomedio, categorie.aliquota FROM {schema}.produttori INNER JOIN {schema}.prodotti ON prodotti.produttore = produttori.produttore INNER JOIN {schema}.categorie ON prodotti.categoria = categorie.categoria GROUP BY produttori.produttore, categorie.categoria ORDER BY produttori.produttore, categorie.categoria"
+        Recap = pd.read_sql(query, conn)
+        db_disconnect(conn, cursor)
+    except psycopg2.Error as e:
+        dlog.error(f"Unable to perform get view recap from schema {schema}. {e}")
+    return Recap

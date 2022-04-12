@@ -77,6 +77,7 @@ def create_schema_tables(conn, cursor, schema):
             Categoria VARCHAR(50) NOT NULL,
             Quantita SMALLINT NOT NULL DEFAULT 0,
             Prezzo NUMERIC(5,2) NOT NULL DEFAULT 0,
+            ValoreTotale DECIMAL (8, 2) GENERATED ALWAYS AS (Prezzo * Quantita) STORED,
             DispMedico BOOLEAN NOT NULL DEFAULT FALSE,
             EtaMinima SMALLINT NOT NULL DEFAULT 18,
             Bio BOOLEAN NOT NULL DEFAULT FALSE,

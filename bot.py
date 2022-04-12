@@ -185,7 +185,7 @@ def main_menu(update, context, schema):
     else:
         #/vista:
         actionstr = f"Quale vista vuoi estrarre?"
-        buttons = ['Prodotto', 'Produttore', 'Categoria', 'Storico ordini', 'Lista ordini', 'Esci']
+        buttons = ['Prodotti', 'Recap', 'Storico ordini', 'Lista ordine', 'Esci']
     msg = f"Ciao! Sei nel magazzino di <b>{schema.upper()}</b>.\n\n🤖📦✏ <b>{actionstr}</b>"
     keyboard = []
     for button in buttons:
@@ -217,13 +217,13 @@ def process_menu(update, context):
             context.user_data["last_sent"] = message.message_id
             return CONV_END
     else:
-        if choice == 'Prodotto':
-            return vista_prodotti(update, context)
-        else:
+        if choice == 'Esci':
             msg = f"Ok. A presto!"
             message = context.bot.send_message(chat_id=update.effective_chat.id, text=msg)
             context.user_data["last_sent"] = message.message_id
             return CONV_END
+        else:
+            return get_vista(update, context, choice)
 
 #"/aggiorna":
 def aggiorna(update, context):
@@ -865,6 +865,8 @@ def save_to_db(update, context):
 
     #trigger STORE TO DB:
     if choice == 'Sì':
+        msg = f"Salvataggio in corso..."
+        message = context.bot.send_message(chat_id=update.effective_chat.id, text=msg)
         schema = context.user_data.get('schema')
         p_code = context.user_data['p_code']
         info = {
@@ -877,6 +879,7 @@ def save_to_db(update, context):
         }
         #save to DB:
         ret = db_interactor.register_prodinfo(schema, info)
+        context.bot.delete_message(chat_id=update.effective_chat.id, message_id=message.message_id)
         if ret == -1:
             msg = f"C'è stato un problema col mio DB, ti chiedo scusa!"
             message = context.bot.send_message(chat_id=update.effective_chat.id, text=msg)
@@ -1156,11 +1159,19 @@ def process_nosugar(update, context):
 
 
 #"viste":
-def vista_prodotti(update, context):
-    #get view:
+def get_vista(update, context, choice):
+    msg = f"Estrazione vista in corso..."
+    message = context.bot.send_message(chat_id=update.effective_chat.id, text=msg)
+    #get vista:
+    choice = choice.lower()
     schema = context.user_data.get('schema')
-    filename = f'./data_cache/{schema}.prodotti.xlsx'
-    ret = bot_functions.create_view_prodotti(schema, filename)
+    filename = f'./data_cache/{schema}.{choice}.xlsx'
+    #forker:
+    if choice == 'prodotti':
+        ret = bot_functions.create_view_prodotti(schema, filename)
+    elif choice == 'recap':
+        ret = bot_functions.create_view_recap(schema, filename)
+    context.bot.delete_message(chat_id=update.effective_chat.id, message_id=message.message_id)
     if ret == 0:
         #3) send file to user:
         xlsx = open(filename, 'rb')
