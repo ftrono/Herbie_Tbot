@@ -11,11 +11,11 @@ from globals import *
 #GLOBALS:
 #conversation states:
 START, SET_AUTH = range(0, 2)
-PICK_WH, PROCESS_MENU, PROCESS_PCODE, ASK_DISCOUNT, ASK_ALIQUOTA = range(0, 5)
-INIT_ADD, PROCESS_SUPPLIER, SAVE_SUPPLIER, PROCESS_PNAME, PROCESS_CATEGORY = range(5, 10)
-SAVE_CATEGORY, PROCESS_PRICE, PROCESS_PIECES, SAVE_EDIT, NEXT_STEP = range(10, 15)
-EDIT_INFO, PROCESS_DISP_MEDICO, PROCESS_MIN_AGE, PROCESS_BIO, PROCESS_VEGAN = range(15, 20)
-PROCESS_NOGLUTEN, PROCESS_NOLACTOSE, PROCESS_NOSUGAR, CLEAN_DB = range(20, 24)
+PICK_WH, PROCESS_MENU, PROCESS_PCODE, ASK_ALIQUOTA, INIT_ADD = range(0, 5)
+PROCESS_SUPPLIER, ASK_DISCOUNT, SAVE_SUPPLIER, PROCESS_PNAME, PROCESS_CATEGORY = range(5, 10)
+ASK_ALIQUOTA, SAVE_CATEGORY, PROCESS_PRICE, PROCESS_PIECES, SAVE_EDIT = range(10, 15)
+NEXT_STEP, EDIT_INFO, PROCESS_DISP_MEDICO, PROCESS_MIN_AGE, PROCESS_BIO = range(15, 20)
+PROCESS_VEGAN, PROCESS_NOGLUTEN, PROCESS_NOLACTOSE, PROCESS_NOSUGAR, CLEAN_DB = range(20, 25)
 CONV_END = -1 #value of ConversationHandler.END
 
 #default messages:
@@ -95,7 +95,7 @@ def start(update, context):
 
 #"/registrami":
 #registrami - 1) ask OTP:
-def registrami(update: Update, context: CallbackContext):
+def registrami(update, context):
     #reset:
     reset_priors(update, context)
     #asks user to send the OTP:
@@ -106,7 +106,7 @@ def registrami(update: Update, context: CallbackContext):
     return SET_AUTH
 
 #2) match OTP with related License in DB: if found, register auth for the user:
-def set_auth(update: Update, context: CallbackContext):
+def set_auth(update, context):
     chat_id = update.effective_chat.id
     #get received OTP:
     otp = update.message.text
@@ -206,9 +206,9 @@ def process_menu(update, context):
         if choice == 'Prodotto':
             return prodotto(update, context)
         elif choice == 'Produttore':
-            return produttore(update, context)
+            return ask_supplier(update, context)
         elif choice == 'Categoria':
-            return categoria(update, context)
+            return ask_category(update, context)
         elif choice == 'Pulisci magazzino':
             return ask_clean(update, context)
         else:
@@ -256,7 +256,7 @@ def ask_clean(update, context):
     reset_priors(update, context)
     chat_id = update.effective_chat.id
     schema = context.user_data.get('schema')
-    msg = f"<b>Pulizia magazzino:</b>\nIl comando rimuoverà dal magazzino virtuale tutti i prodotti che hanno zero pezzi e tutti i produttori e le categorie prodotto non utilizzate. Sarà necessario reinserirle in futuro se dovessero servire.\n\nSei sicuro di voler procedere?"
+    msg = f"<b>Pulizia magazzino:</b>\nIl comando rimuoverà dal magazzino virtuale <b>{schema.upper()}</b> tutti i prodotti che hanno zero pezzi e tutti i produttori e le categorie prodotto non utilizzate. Sarà necessario reinserirle in futuro se dovessero servire.\n\nSei sicuro di voler procedere?"
     keyboard = [[InlineKeyboardButton('Sì', callback_data='Sì'),
                 InlineKeyboardButton('No', callback_data='No')]]
     message = context.bot.send_message(chat_id=update.effective_chat.id, text=msg,
@@ -284,136 +284,11 @@ def pulisci(update, context):
         message = context.bot.send_message(chat_id=chat_id, text=msg)
         ret = db_interactor.clean_db(schema)
         if ret == 0:
-            msg = f"Pulizia del magazzino {schema} completata! Ho eliminato i prodotti con zero pezzi e i produttori/categorie non utilizzati."
+            msg = f"Pulizia del magazzino {schema.upper()} completata! Ho eliminato i prodotti con zero pezzi e i produttori/categorie non utilizzati."
             message.edit_text(msg)
         else:
-            msg = f"C'è stato un problema, ti chiedo scusa! Pulizia del magazzino {schema} non completata."
+            msg = f"C'è stato un problema, ti chiedo scusa! Pulizia del magazzino {schema.upper()} non completata."
             message.edit_text(msg)
-        return CONV_END
-
-#PRODUTTORE:
-#produttore - 1) ask name of new supplier:
-def produttore(update, context):
-    msg = f"Registriamo un nuovo <b>produttore</b>, o aggiorniamone lo sconto medio sugli ordini.\n\n"+\
-            f"Inviami il nome del produttore. Oppure usa /esci per uscire."
-    message = context.bot.send_message(chat_id=update.effective_chat.id, text=msg,
-        parse_mode=ParseMode.HTML)
-    context.user_data["last_sent"] = message.message_id
-    return ASK_DISCOUNT
-
-#produttore - 2) ask typical discount on orders from supplier:
-def ask_discount(update: Update, context: CallbackContext):
-    #store supplier from user message:
-    supplier = update.message.text.lower()
-    context.user_data['supplier'] = supplier
-    #ask discount:
-    msg = f"Ricevuto! Ora scrivimi la percentuale di sconto sugli ordini applicata in media da {supplier} (es. 30%).\n\nOppure usa /esci per uscire."
-    message = context.bot.send_message(chat_id=update.effective_chat.id, text=msg)
-    context.user_data["last_sent"] = message.message_id
-    return SAVE_SUPPLIER
-
-#produttore - 3) save new supplier and its typical discount rate on orders:
-def save_supplier(update, context):
-    #store average discount from user message:
-    discount = update.message.text.strip('%')
-    discount = discount.replace(',', '.')
-    try:
-        discount = int(discount)
-    except:
-        msg = "Re-inviami soltanto la percentuale in cifre (es. 30%).\n\nOppure usa /esci per uscire."
-        message = context.bot.send_message(chat_id=update.effective_chat.id, text=msg)
-        context.user_data["last_sent"] = message.message_id
-        return SAVE_SUPPLIER
-
-    #save new data to DB:
-    supplier = context.user_data['supplier']
-    schema = context.user_data['schema']
-    ret = db_interactor.add_supplier(schema, supplier, discount)
-    if ret == 0:
-        #if caller is edit info -> return to state Recap:
-        if context.user_data.get('to_edit') != None:
-            return process_pieces(update, context)
-        msg = f"Fatto! Ti ho salvato produttore {supplier} e relativo sconto medio {discount}% nel magazzino {schema}."
-        #check if this state has been reached from the "/product" conversatiion: if so, continue there:
-        if context.user_data.get("NEW_SUPPLIER") == True:
-            #ask next:
-            msg = f"{msg}\n\nOra scrivimi il nome dettagliato del <b>prodotto</b>. Aggiungi tutte le info necessarie, es.:\n\n<i>Grintuss pediatric sciroppo 12 flaconcini</i>\n\nOppure usa /esci per uscire."
-            message = context.bot.send_message(chat_id=update.effective_chat.id, text=msg, parse_mode=ParseMode.HTML)
-            context.user_data["last_sent"] = message.message_id
-            context.user_data["NEW_SUPPLIER"] = None
-            return PROCESS_PNAME
-        else:
-            message = context.bot.send_message(chat_id=update.effective_chat.id, text=msg)
-            context.user_data["last_sent"] = message.message_id
-            return CONV_END
-    else:
-        msg = f"C'è stato un problema col mio DB, ti chiedo scusa!"
-        message = context.bot.send_message(chat_id=update.effective_chat.id, text=msg)
-        context.user_data["last_sent"] = message.message_id
-        return CONV_END
-
-
-#"CATEGORIA":
-#categoria - 1) ask name of new supplier:
-def categoria(update, context):
-    msg = f"Registriamo una nuova <b>categoria</b> prodotti, o aggiorniamone l'aliquota IVA.\n\n"+\
-            f"Inviami il nome della categoria. Oppure usa /esci per uscire."
-    message = context.bot.send_message(chat_id=update.effective_chat.id, text=msg,
-        parse_mode=ParseMode.HTML)
-    context.user_data["last_sent"] = message.message_id
-    return ASK_ALIQUOTA
-
-#categoria - 2) ask typical discount on orders from supplier:
-def ask_aliquota(update: Update, context: CallbackContext):
-    #store supplier from user message:
-    category = update.message.text.lower()
-    context.user_data['category'] = category
-    #ask discount:
-    msg = f"Ricevuto! Ora scrivimi l'aliquota IVA applicabile alla categoria {category} (es. 10%).\n\nOppure usa /esci per uscire."
-    message = context.bot.send_message(chat_id=update.effective_chat.id, text=msg)
-    context.user_data["last_sent"] = message.message_id
-    return SAVE_CATEGORY
-
-#categoria - 3) save new supplier and its typical discount rate on orders:
-def save_category(update, context):
-    #store average discount from user message:
-    vat = update.message.text.strip('%')
-    vat = vat.replace(',', '.')
-    try:
-        vat = float(vat)
-    except:
-        msg = "Re-inviami soltanto l'aliquota in cifre (es. 10%).\n\nOppure usa /esci per uscire."
-        message = context.bot.send_message(chat_id=update.effective_chat.id, text=msg)
-        context.user_data["last_sent"] = message.message_id
-        return SAVE_CATEGORY
-
-    #save new data to DB:
-    category = context.user_data['category']
-    schema = context.user_data['schema']
-    ret = db_interactor.add_category(schema, category, vat)
-    if ret == 0:
-        #if caller is edit info -> return to state Recap:
-        if context.user_data.get('to_edit') != None:
-            return process_pieces(update, context)
-        msg = f"Fatto! Ti ho salvato categoria {category} e relativa aliquota IVA applicabile {vat}% nel magazzino {schema}."
-        #check if this state has been reached from the "/product" conversatiion: if so, continue there:
-        if context.user_data.get("NEW_CATEGORY") == True:
-            #ask next:
-            msg = f"{msg}\n\nQual è il <b>prezzo al pubblico</b> del prodotto?\n"+\
-                    f"Scrivi solo la <i>cifra</i> in Euro (es. 10 o 10,50)."
-            message = context.bot.send_message(chat_id=update.effective_chat.id, text=msg,
-                parse_mode=ParseMode.HTML)
-            context.user_data["last_sent"] = message.message_id
-            context.user_data["NEW_CATEGORY"] = None
-            return PROCESS_PRICE
-        else:
-            message = context.bot.send_message(chat_id=update.effective_chat.id, text=msg)
-            context.user_data["last_sent"] = message.message_id
-            return CONV_END
-    else:
-        msg = f"C'è stato un problema col mio DB, ti chiedo scusa!"
-        message = context.bot.send_message(chat_id=update.effective_chat.id, text=msg)
-        context.user_data["last_sent"] = message.message_id
         return CONV_END
 
 
@@ -609,8 +484,9 @@ def ask_supplier(update, context):
     context.user_data["last_sent"] = message.message_id
     return PROCESS_SUPPLIER
 
-#ADD 2) process supplier and ask p_name:
+#ADD 2) / PRODUTTORE 1) process supplier and ask next:
 def process_supplier(update, context):
+    caller = context.user_data.get('caller')
     try:
         #IF ALREADY IN DB -> get from query:
         supplier = answer_query(update, context)
@@ -620,6 +496,8 @@ def process_supplier(update, context):
         #if caller is edit info -> return to state Recap:
         if context.user_data.get('to_edit') != None:
             return process_pieces(update, context)
+        elif caller == 'aggiorna':
+            return rename_supplier(update, context, supplier)
         else:
             return ask_pname(update, context, supplier)
     except:
@@ -642,9 +520,81 @@ def process_supplier(update, context):
             #if caller is edit info -> return to state Recap:
             if context.user_data.get('to_edit') != None:
                 return process_pieces(update, context)
+            elif caller == 'aggiorna':
+                return rename_supplier(update, context, supplier)
             else:
                 #ask next:
                 return ask_pname(update, context, supplier)
+
+#produttore - 1) rename supplier:
+def rename_supplier(update, context, supplier):
+    #ask rename:
+    msg = f"Scrivimi il nuovo nome del produttore {supplier}.\nSe non vuoi modificarlo inviami <b>NO</b>.\n\nOppure usa /esci per uscire."
+    message = context.bot.send_message(chat_id=update.effective_chat.id, text=msg, parse_mode=ParseMode.HTML)
+    context.user_data["last_sent"] = message.message_id
+    return ASK_DISCOUNT
+
+#produttore - 2) ask typical discount on orders from supplier:
+def ask_discount(update, context):
+    #store supplier from user message:
+    choice = update.message.text.lower()
+    if choice == 'no':
+        supplier = context.user_data['supplier']
+        msg = f"Ok, mantengo il nome '{supplier}'. "
+    else:
+        supplier = choice
+        context.user_data['new_supplier_name'] = supplier
+        msg = f"Ok, salverò il nuovo nome '{supplier}'. "
+    #ask discount:
+    msg = f"{msg}Ora scrivimi la percentuale di sconto sugli ordini applicata in media da {supplier} (es. 30%).\n\nOppure usa /esci per uscire."
+    message = context.bot.send_message(chat_id=update.effective_chat.id, text=msg)
+    context.user_data["last_sent"] = message.message_id
+    return SAVE_SUPPLIER
+
+#produttore - 3) save new supplier and its typical discount rate on orders:
+def save_supplier(update, context):
+    #store average discount from user message:
+    discount = update.message.text.strip('%')
+    discount = discount.replace(',', '.')
+    try:
+        discount = int(discount)
+    except:
+        msg = "Re-inviami soltanto la percentuale in cifre (es. 30%).\n\nOppure usa /esci per uscire."
+        message = context.bot.send_message(chat_id=update.effective_chat.id, text=msg)
+        context.user_data["last_sent"] = message.message_id
+        return SAVE_SUPPLIER
+
+    #save new data to DB:
+    supplier = context.user_data['supplier']
+    schema = context.user_data['schema']
+    new_name = context.user_data.get('new_supplier_name')
+    ret = db_interactor.register_supplier(schema, supplier, discount, new_name=new_name)
+    if ret == 0:
+        if new_name != None:
+            supplier = new_name
+        context.user_data['new_supplier_name'] = None
+        #if caller is edit info -> return to state Recap:
+        if context.user_data.get('to_edit') != None:
+            return process_pieces(update, context)
+        msg = f"Fatto! Ti ho salvato produttore {supplier} e relativo sconto medio {discount}% nel magazzino {schema}."
+        #check if this state has been reached from the "/product" conversatiion: if so, continue there:
+        if context.user_data.get("NEW_SUPPLIER") == True:
+            #ask next:
+            msg = f"{msg}\n\nOra scrivimi il nome dettagliato del <b>prodotto</b>. Aggiungi tutte le info necessarie, es.:\n\n<i>Grintuss pediatric sciroppo 12 flaconcini</i>\n\nOppure usa /esci per uscire."
+            message = context.bot.send_message(chat_id=update.effective_chat.id, text=msg, parse_mode=ParseMode.HTML)
+            context.user_data["last_sent"] = message.message_id
+            context.user_data["NEW_SUPPLIER"] = None
+            return PROCESS_PNAME
+        else:
+            message = context.bot.send_message(chat_id=update.effective_chat.id, text=msg)
+            context.user_data["last_sent"] = message.message_id
+            return CONV_END
+    else:
+        msg = f"C'è stato un problema col mio DB, ti chiedo scusa!"
+        message = context.bot.send_message(chat_id=update.effective_chat.id, text=msg)
+        context.user_data["last_sent"] = message.message_id
+        return CONV_END
+
 
 #common helper:
 def ask_pname(update, context, supplier=None):
@@ -674,14 +624,18 @@ def process_pname(update, context):
         #else -> next message:
         return ask_category(update, context, p_name)
 
+
 #common helper:
 def ask_category(update, context, p_name=None):
+    caller = context.user_data.get('caller')
     #if caller is edit info:
-    if context.user_data.get('to_edit') != None:
-        msg = f"Scrivimi"
+    if caller == 'aggiorna':
+        msg = f"Scrivimi il nome della <b>categoria prodotti</b> a cui ti riferisci"
+    elif context.user_data.get('to_edit') != None:
+        msg = f"Scrivimi a quale <b>categoria</b> appartiene il prodotto"
     else:
-        msg = f"Segnato nome '{p_name}'! Ora dimmi"
-    msg = f"{msg} a quale <b>categoria</b> appartiene il prodotto (es. cosmesi, alimentazione, ...). Oppure usa /esci per uscire.\n\nNOTA: Se non è fra i suggerimenti, inviami direttamente il nome."
+        msg = f"Segnato nome '{p_name}'! Ora dimmi a quale <b>categoria</b> appartiene il prodotto"
+    msg = f"{msg} (es. cosmesi, alimentazione, ...). Oppure usa /esci per uscire.\n\nNOTA: Se non è fra i suggerimenti, inviami direttamente il nome."
     #category picker:
     schema = context.user_data.get('schema')
     keyboard = bot_functions.inline_picker(schema, 'categoria')
@@ -691,8 +645,9 @@ def ask_category(update, context, p_name=None):
     context.user_data["last_sent"] = message.message_id
     return PROCESS_CATEGORY
 
-#ADD 4) process category and ask price:
+#ADD 4) / CATEGORIA 1) process category and ask next:
 def process_category(update, context):
+    caller = context.user_data.get('caller')
     try:
         #IF ALREADY IN DB -> get from query:
         category = answer_query(update, context)
@@ -702,6 +657,8 @@ def process_category(update, context):
         #if caller is edit info -> return to state Recap:
         if context.user_data.get('to_edit') != None:
             return process_pieces(update, context)
+        elif caller == 'aggiorna':
+            return rename_category(update, context, category)
         else:
             return ask_price(update, context, category)
     except:
@@ -724,9 +681,84 @@ def process_category(update, context):
             #if caller is edit info -> return to state Recap:
             if context.user_data.get('to_edit') != None:
                 return process_pieces(update, context)
+            elif caller == 'aggiorna':
+                return rename_category(update, context, category)
             else:
                 #ask next:
                 return ask_price(update, context, category)
+
+
+#categoria - 1) rename categoria:
+def rename_category(update, context, categoria):
+    #ask rename:
+    msg = f"Scrivimi il nuovo nome della categoria {categoria}.\nSe non vuoi modificarlo inviami <b>NO</b>.\n\nOppure usa /esci per uscire."
+    message = context.bot.send_message(chat_id=update.effective_chat.id, text=msg, parse_mode=ParseMode.HTML)
+    context.user_data["last_sent"] = message.message_id
+    return ASK_ALIQUOTA
+
+#categoria - 2) ask applicable VAT rate on this category:
+def ask_aliquota(update, context):
+    #store category / choice from user message:
+    choice = update.message.text.lower()
+    if choice == 'no':
+        category = context.user_data['category']
+        msg = f"Ok, mantengo il nome '{category}'. "
+    else:
+        category = choice
+        context.user_data['new_category_name'] = category
+        msg = f"Ok, salverò il nuovo nome '{category}'. "
+    #ask discount:
+    msg = f"{msg}Ora scrivimi l'aliquota IVA applicabile alla categoria {category} (es. 10%).\n\nOppure usa /esci per uscire."
+    message = context.bot.send_message(chat_id=update.effective_chat.id, text=msg)
+    context.user_data["last_sent"] = message.message_id
+    return SAVE_CATEGORY
+
+#categoria - 3) save new category and its applicable VAT rate:
+def save_category(update, context):
+    #store average discount from user message:
+    vat = update.message.text.strip('%')
+    vat = vat.replace(',', '.')
+    try:
+        vat = float(vat)
+    except:
+        msg = "Re-inviami soltanto l'aliquota in cifre (es. 10%).\n\nOppure usa /esci per uscire."
+        message = context.bot.send_message(chat_id=update.effective_chat.id, text=msg)
+        context.user_data["last_sent"] = message.message_id
+        return SAVE_CATEGORY
+
+    #save new data to DB:
+    category = context.user_data['category']
+    schema = context.user_data['schema']
+    new_name = context.user_data.get('new_category_name')
+    ret = db_interactor.register_category(schema, category, vat, new_name=new_name)
+    if ret == 0:
+        if new_name != None:
+            category = new_name
+        context.user_data['new_category_name'] = None
+        #if caller is edit info -> return to state Recap:
+        if context.user_data.get('to_edit') != None:
+            return process_pieces(update, context)
+        msg = f"Fatto! Ti ho salvato categoria {category} e relativa aliquota IVA applicabile {vat}% nel magazzino {schema}."
+        #check if this state has been reached from the "/product" conversatiion: if so, continue there:
+        if context.user_data.get("NEW_CATEGORY") == True:
+            #ask next:
+            msg = f"{msg}\n\nQual è il <b>prezzo al pubblico</b> del prodotto?\n"+\
+                    f"Scrivi solo la <i>cifra</i> in Euro (es. 10 o 10,50)."
+            message = context.bot.send_message(chat_id=update.effective_chat.id, text=msg,
+                parse_mode=ParseMode.HTML)
+            context.user_data["last_sent"] = message.message_id
+            context.user_data["NEW_CATEGORY"] = None
+            return PROCESS_PRICE
+        else:
+            message = context.bot.send_message(chat_id=update.effective_chat.id, text=msg)
+            context.user_data["last_sent"] = message.message_id
+            return CONV_END
+    else:
+        msg = f"C'è stato un problema col mio DB, ti chiedo scusa!"
+        message = context.bot.send_message(chat_id=update.effective_chat.id, text=msg)
+        context.user_data["last_sent"] = message.message_id
+        return CONV_END
+
 
 #common helper:
 def ask_price(update, context, category=None):
@@ -1124,7 +1156,7 @@ def process_nosugar(update, context):
 
 
 #"viste":
-def vista_prodotti(update: Update, context: CallbackContext):
+def vista_prodotti(update, context):
     #get view:
     schema = context.user_data.get('schema')
     filename = f'./data_cache/{schema}.prodotti.xlsx'
@@ -1143,7 +1175,7 @@ def vista_prodotti(update: Update, context: CallbackContext):
 
 #GENERIC HANDLERS:
 #default reply:
-def default_reply(update: Update, context: CallbackContext):
+def default_reply(update, context):
     #reset:
     end_open_query(update, context)
     remove_open_keyboards(update, context)
@@ -1223,6 +1255,10 @@ def main() -> None:
                 MessageHandler(Filters.regex("^(Esci|esci|Annulla|annulla|Stop|stop)$"), esci),
                 CallbackQueryHandler(process_supplier, pattern='.*'),
                 MessageHandler(Filters.text, process_supplier)],
+            ASK_DISCOUNT: [
+                CommandHandler('esci', esci),
+                MessageHandler(Filters.regex("^(Esci|esci|Annulla|annulla|Stop|stop)$"), esci),
+                MessageHandler(Filters.text, ask_discount)],
             SAVE_SUPPLIER: [
                 CommandHandler('esci', esci),
                 MessageHandler(Filters.regex("^(Esci|esci|Annulla|annulla|Stop|stop)$"), esci),
@@ -1236,6 +1272,10 @@ def main() -> None:
                 MessageHandler(Filters.regex("^(Esci|esci|Annulla|annulla|Stop|stop)$"), esci),
                 CallbackQueryHandler(process_category, pattern='.*'),
                 MessageHandler(Filters.text, process_category)],
+            ASK_ALIQUOTA: [
+                CommandHandler('esci', esci),
+                MessageHandler(Filters.regex("^(Esci|esci|Annulla|annulla|Stop|stop)$"), esci),
+                MessageHandler(Filters.text, ask_aliquota)],
             SAVE_CATEGORY: [
                 CommandHandler('esci', esci),
                 MessageHandler(Filters.regex("^(Esci|esci|Annulla|annulla|Stop|stop)$"), esci),

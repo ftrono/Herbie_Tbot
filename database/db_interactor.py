@@ -180,7 +180,7 @@ def add_detail(schema, p_code, colname, value):
         return -1
 
 #register a new supplier:
-def add_supplier(schema, supplier, discount):
+def register_supplier(schema, supplier, discount, new_name=None):
     try:
         conn, cursor = db_connect()
         #1) check if supplier already in DB:
@@ -193,11 +193,12 @@ def add_supplier(schema, supplier, discount):
             conn.commit()
             dlog.info(f"Registered supplier {supplier}, discount {discount}%, to table {schema}.produttori.")
         else:
-            #if already in DB -> update discount:
-            query = f"UPDATE {schema}.produttori SET scontomedio = {discount} WHERE produttore = '{supplier}'"
+            #if already in DB -> update info:
+            newnamestr = f"produttore = '{new_name}', " if new_name else ""
+            query = f"UPDATE {schema}.produttori SET {newnamestr}scontomedio = {discount} WHERE produttore = '{supplier}'"
             cursor.execute(query)
             conn.commit()
-            dlog.info(f"Updated discount rate for supplier {supplier} to {discount}%, table {schema}.produttori.")
+            dlog.info(f"Updated info for supplier {supplier} into table {schema}.produttori.")
             db_disconnect(conn, cursor)
         return 0
     except psycopg2.Error as e:
@@ -205,7 +206,7 @@ def add_supplier(schema, supplier, discount):
         return -1
 
 #register a new category:
-def add_category(schema, category, vat):
+def register_category(schema, category, vat, new_name=None):
     try:
         conn, cursor = db_connect()
         #1) check if category already in DB:
@@ -218,11 +219,12 @@ def add_category(schema, category, vat):
             conn.commit()
             dlog.info(f"Registered category {category}, vat rate {vat}%, to table {schema}.categorie.")
         else:
-            #if already in DB -> update vat rate:
-            query = f"UPDATE {schema}.categorie SET aliquota = {vat} WHERE categoria = '{category}'"
+            #if already in DB -> update info:
+            newnamestr = f"categoria = '{new_name}', " if new_name else ""
+            query = f"UPDATE {schema}.categorie SET {newnamestr}aliquota = {vat} WHERE categoria = '{category}'"
             cursor.execute(query)
             conn.commit()
-            dlog.info(f"Updated vat rate for category {category} to {vat}%, table {schema}.categorie.")
+            dlog.info(f"Updated info for category {category} into table {schema}.categorie.")
             db_disconnect(conn, cursor)
         return 0
     except psycopg2.Error as e:
