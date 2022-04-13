@@ -264,48 +264,6 @@ def vista(update, context):
     else:
         return main_menu(update, context, schema)
 
-#CLEAN DB:
-#pulisci - 1) ask confirmation:
-def ask_clean(update, context):
-    #reset:
-    reset_priors(update, context)
-    chat_id = update.effective_chat.id
-    schema = context.user_data.get('schema')
-    msg = f"<b>Pulizia magazzino:</b>\nIl comando rimuoverà dal magazzino virtuale <b>{schema.upper()}</b> tutti i prodotti che hanno zero pezzi e tutti i produttori e le categorie prodotto non utilizzate. Sarà necessario reinserirle in futuro se dovessero servire.\n\nSei sicuro di voler procedere?"
-    keyboard = [[InlineKeyboardButton('Sì', callback_data='Sì'),
-                InlineKeyboardButton('No', callback_data='No')]]
-    message = context.bot.send_message(chat_id=update.effective_chat.id, text=msg,
-        parse_mode=ParseMode.HTML,
-        reply_markup=InlineKeyboardMarkup(keyboard))
-    context.user_data["last_sent"] = message.message_id
-    return CLEAN_DB
-
-#pulisci - 2) perform cleaning:
-def pulisci(update, context):
-    #get open query:
-    choice = answer_query(update, context)
-    tlog.info(choice)
-    if choice == 'No':
-        msg = f"Ok. A presto!"
-        message = context.bot.send_message(chat_id=update.effective_chat.id, text=msg)
-        context.user_data["last_sent"] = message.message_id
-        return CONV_END
-    else:
-        #clean:
-        chat_id = update.effective_chat.id
-        schema = context.user_data.get('schema')
-        tlog.info(f"DB cleaning launched by user: {chat_id} on schema: {schema}")
-        msg = f"Pulizia in corso..."
-        message = context.bot.send_message(chat_id=chat_id, text=msg)
-        ret = db_interactor.clean_db(schema)
-        if ret == 0:
-            msg = f"Pulizia del magazzino {schema.upper()} completata! Ho eliminato i prodotti con zero pezzi e i produttori/categorie non utilizzati."
-            message.edit_text(msg)
-        else:
-            msg = f"C'è stato un problema, ti chiedo scusa! Pulizia del magazzino {schema.upper()} non completata."
-            message.edit_text(msg)
-        return CONV_END
-
 
 #"/prodotto":
 #prodotto - 1) ask p_code mode: text or photo:
@@ -1256,6 +1214,48 @@ def get_vista(update, context):
         msg = f"Non ho trovato viste corrispondenti. Rilancia il comando /vista per riprovare."
         message = context.bot.send_message(chat_id=update.effective_chat.id, text=msg)
         context.user_data["last_sent"] = message.message_id
+        return CONV_END
+
+
+#CLEAN DB:
+#pulisci - 1) ask confirmation:
+def ask_clean(update, context):
+    #reset:
+    reset_priors(update, context)
+    schema = context.user_data.get('schema')
+    msg = f"<b>Pulizia magazzino:</b>\nIl comando rimuoverà dal magazzino virtuale <b>{schema.upper()}</b> tutti i prodotti che hanno zero pezzi e tutti i produttori e le categorie prodotto non utilizzate. Sarà necessario reinserirle in futuro se dovessero servire.\n\nSei sicuro di voler procedere?"
+    keyboard = [[InlineKeyboardButton('Sì', callback_data='Sì'),
+                InlineKeyboardButton('No', callback_data='No')]]
+    message = context.bot.send_message(chat_id=update.effective_chat.id, text=msg,
+        parse_mode=ParseMode.HTML,
+        reply_markup=InlineKeyboardMarkup(keyboard))
+    context.user_data["last_sent"] = message.message_id
+    return CLEAN_DB
+
+#pulisci - 2) perform cleaning:
+def pulisci(update, context):
+    #get open query:
+    choice = answer_query(update, context)
+    tlog.info(choice)
+    if choice == 'No':
+        msg = f"Ok. A presto!"
+        message = context.bot.send_message(chat_id=update.effective_chat.id, text=msg)
+        context.user_data["last_sent"] = message.message_id
+        return CONV_END
+    else:
+        #clean:
+        chat_id = update.effective_chat.id
+        schema = context.user_data.get('schema')
+        tlog.info(f"DB cleaning launched by user: {chat_id} on schema: {schema}")
+        msg = f"Pulizia in corso..."
+        message = context.bot.send_message(chat_id=chat_id, text=msg)
+        ret = db_interactor.clean_db(schema)
+        if ret == 0:
+            msg = f"Pulizia del magazzino {schema.upper()} completata! Ho eliminato i prodotti con zero pezzi e i produttori/categorie non utilizzati."
+            message.edit_text(msg)
+        else:
+            msg = f"C'è stato un problema, ti chiedo scusa! Pulizia del magazzino {schema.upper()} non completata."
+            message.edit_text(msg)
         return CONV_END
 
 
