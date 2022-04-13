@@ -64,6 +64,17 @@ def answer_query(update, context, delete=False):
     query.answer()
     return choice
 
+def code_to_int(p_code):
+    #try conversion to int (there might be some initial letters, to be cut):
+    try:
+        try:
+            p_code = int(p_code)
+        except:
+            p_code = int(p_code[1:])
+    except:
+        p_code = int(p_code[2:])
+    return p_code
+
 
 #COMMANDS & HELPERS
 
@@ -204,10 +215,13 @@ def process_menu(update, context):
     #sorter:
     if caller == 'aggiorna':
         if choice == 'Prodotto':
+            context.user_data['caller'] = 'upd_prod'
             return prodotto(update, context)
         elif choice == 'Produttore':
+            context.user_data['caller'] = 'upd_supp'
             return ask_supplier(update, context)
         elif choice == 'Categoria':
+            context.user_data['caller'] = 'upd_cat'
             return ask_category(update, context)
         elif choice == 'Pulisci magazzino':
             return ask_clean(update, context)
@@ -325,8 +339,9 @@ def process_pcode(update, context):
             context.bot.delete_message(chat_id=update.effective_chat.id, message_id=photo_message)
             #store barcode in bot memory:
             tlog.info(f"Letto codice {p_code}.")
+            p_code = code_to_int(p_code)
+            context.user_data['p_code'] = p_code
             msg = f"Ho letto il codice {p_code}. "
-            context.user_data['p_code'] = int(p_code)
         except:
             #no barcodes found:
             context.bot.delete_message(chat_id=update.effective_chat.id, message_id=photo_message)
@@ -341,9 +356,7 @@ def process_pcode(update, context):
 
         #CASE B.1) NUMERICAL CODE:
         try:
-            #try conversion to int:
-            p_code = int(p_text)
-
+            p_code = code_to_int(p_text)
             #check if the code is the index of a Matches list already sent:
             if p_code in [1, 2, 3]:
                 Matches = context.user_data.get('Matches')
@@ -496,7 +509,7 @@ def process_supplier(update, context):
         #if caller is edit info -> return to state Recap:
         if context.user_data.get('to_edit') != None:
             return process_pieces(update, context)
-        elif caller == 'aggiorna':
+        elif caller == 'upd_supp':
             return rename_supplier(update, context, supplier)
         else:
             return ask_pname(update, context, supplier)
@@ -520,7 +533,7 @@ def process_supplier(update, context):
             #if caller is edit info -> return to state Recap:
             if context.user_data.get('to_edit') != None:
                 return process_pieces(update, context)
-            elif caller == 'aggiorna':
+            elif caller == 'upd_supp':
                 return rename_supplier(update, context, supplier)
             else:
                 #ask next:
@@ -629,7 +642,7 @@ def process_pname(update, context):
 def ask_category(update, context, p_name=None):
     caller = context.user_data.get('caller')
     #if caller is edit info:
-    if caller == 'aggiorna':
+    if caller == 'upd_cat':
         msg = f"Scrivimi il nome della <b>categoria prodotti</b> a cui ti riferisci"
     elif context.user_data.get('to_edit') != None:
         msg = f"Scrivimi a quale <b>categoria</b> appartiene il prodotto"
@@ -657,7 +670,7 @@ def process_category(update, context):
         #if caller is edit info -> return to state Recap:
         if context.user_data.get('to_edit') != None:
             return process_pieces(update, context)
-        elif caller == 'aggiorna':
+        elif caller == 'upd_cat':
             return rename_category(update, context, category)
         else:
             return ask_price(update, context, category)
@@ -681,7 +694,7 @@ def process_category(update, context):
             #if caller is edit info -> return to state Recap:
             if context.user_data.get('to_edit') != None:
                 return process_pieces(update, context)
-            elif caller == 'aggiorna':
+            elif caller == 'upd_cat':
                 return rename_category(update, context, category)
             else:
                 #ask next:

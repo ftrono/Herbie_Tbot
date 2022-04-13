@@ -12,10 +12,15 @@ def extract_barcode(image):
     image.download(image_name)
     #read barcode in photo:
     decoded = pyzbar.decode(Image.open(image_name))
-    p_code = decoded[0].data
-    p_code = p_code.decode("utf-8")
+    tlog.info(decoded)
+    for barcode in decoded:
+        try:
+            p_code = barcode.data
+            p_code = p_code.decode("utf-8")
+            break
+        except:
+            pass
     os.remove(image_name)
-    p_code = int(p_code)
     return p_code
 
 #inline picker keyboard:
@@ -26,6 +31,7 @@ def inline_picker(schema, column_name):
     items = db_interactor.get_column(schema, column_name)
     #build inline keyboard:
     if items != []:
+        items.sort()
         for item in items:
             cnt = cnt + 1
             buf.append(InlineKeyboardButton(str(item), callback_data=str(item)))
