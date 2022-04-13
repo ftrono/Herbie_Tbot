@@ -44,11 +44,11 @@ def inline_picker(schema, column_name):
     return keyboard
 
 
-def create_view_prodotti(schema, filename):
+def create_view_prodotti(schema, filename, supplier=None):
     headers = {'Codice': 'codiceprod', 'Produttore': 'produttore', 'Nome': 'nome', 'Categoria': 'categoria', 'Quantita': 'quantita', 'Prezzo Pubblico €': 'prezzo', 'Sconto Medio %': 'scontomedio', 'IVA %': 'aliquota', 'Costo Acquisto €': 'costoacquisto', 'Costo Giacenze €': 'costototale', 'Valore Giacenze €': 'valoretotale', 'Disp Medico': 'dispmedico', 'Eta Minima': 'etaminima', ' Bio ': 'bio', ' Vegano ': 'vegano', 'Senza Glutine': 'senzaglutine', 'Senza Lattosio': 'senzalattosio', 'Senza Zucchero': 'senzazucchero'}
     #export table to pdf:
     try:
-        Prodotti = db_interactor.get_view_prodotti(schema)
+        Prodotti = db_interactor.get_view_prodotti(schema, supplier)
         if Prodotti.empty == False:
             #1) format adjustments:
             Vista = pd.DataFrame(columns=headers.keys())

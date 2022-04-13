@@ -285,7 +285,7 @@ def get_view_prodotti(schema, supplier=None):
     try:
         conn, cursor = db_connect()
         if supplier:
-            suppstr = f"WHERE produttore = '{supplier}'"
+            suppstr = f"WHERE prodotti.produttore = '{supplier}'"
         query = f"SELECT prodotti.*, produttori.scontomedio, categorie.aliquota FROM {schema}.prodotti INNER JOIN {schema}.produttori ON prodotti.produttore = produttori.produttore INNER JOIN {schema}.categorie ON prodotti.categoria = categorie.categoria {suppstr} ORDER BY prodotti.produttore, prodotti.categoria, prodotti.nome"
         FullList = pd.read_sql(query, conn)
         db_disconnect(conn, cursor)

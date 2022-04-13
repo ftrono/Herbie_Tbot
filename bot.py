@@ -15,7 +15,7 @@ PICK_WH, PROCESS_MENU, PROCESS_PCODE, ASK_ALIQUOTA, INIT_ADD = range(0, 5)
 PROCESS_SUPPLIER, ASK_DISCOUNT, SAVE_SUPPLIER, PROCESS_PNAME, PROCESS_CATEGORY = range(5, 10)
 ASK_ALIQUOTA, SAVE_CATEGORY, PROCESS_PRICE, PROCESS_PIECES, SAVE_EDIT = range(10, 15)
 NEXT_STEP, EDIT_INFO, PROCESS_DISP_MEDICO, PROCESS_MIN_AGE, PROCESS_BIO = range(15, 20)
-PROCESS_VEGAN, PROCESS_NOGLUTEN, PROCESS_NOLACTOSE, PROCESS_NOSUGAR, CLEAN_DB = range(20, 25)
+PROCESS_VEGAN, PROCESS_NOGLUTEN, PROCESS_NOLACTOSE, PROCESS_NOSUGAR, PROCESS_FILTER, CLEAN_DB = range(20, 26)
 CONV_END = -1 #value of ConversationHandler.END
 
 #default messages:
@@ -237,7 +237,8 @@ def process_menu(update, context):
             context.user_data["last_sent"] = message.message_id
             return CONV_END
         else:
-            return get_vista(update, context, choice)
+            context.user_data['vista'] = choice.lower()
+            return ask_filter(update, context)
 
 #"/aggiorna":
 def aggiorna(update, context):
@@ -1171,30 +1172,80 @@ def process_nosugar(update, context):
 
 
 #"viste":
-def get_vista(update, context, choice):
+#viste - 1) main sorter:
+def ask_filter(update, context):
+    choice = context.user_data.get('vista')
+    schema = context.user_data.get('schema')
+    if choice == 'prodotti':
+        msg = f"Vuoi estrarre i dati solo di uno specifico <b>produttore</b>? Se sì, seleziona un produttore dai suggerimenti.\n\n"+\
+                f"Altrimenti, inviami <b>NO</b> e ti estrarrò tutto il magazzino prodotti.\n\nOppure usa /esci per uscire."
+        #supplier picker:
+        keyboard = bot_functions.inline_picker(schema, 'produttore')
+        message = context.bot.send_message(chat_id=update.effective_chat.id, text=msg, 
+            parse_mode=ParseMode.HTML, 
+            reply_markup=InlineKeyboardMarkup(keyboard))
+        context.user_data["last_sent"] = message.message_id
+        return PROCESS_FILTER
+    elif choice == 'lista ordine':
+        msg = f"Vuoi l'ultima lista ordini di uno specifico <b>produttore</b>? Se sì, seleziona un produttore dai suggerimenti.\n\n"+\
+                f"Altrimenti inviami un <b>codice ordine</b>. Se non conosci il codice ordine, inviami la parola <b>STORICO</b>, ti estrarrò tutto lo storico ordini.\n\nOppure usa /esci per uscire."
+        #supplier picker:
+        keyboard = bot_functions.inline_picker(schema, 'produttore')
+        message = context.bot.send_message(chat_id=update.effective_chat.id, text=msg, 
+            parse_mode=ParseMode.HTML, 
+            reply_markup=InlineKeyboardMarkup(keyboard))
+        context.user_data["last_sent"] = message.message_id
+        return PROCESS_FILTER
+    else:
+        return get_vista(update, context)
+
+#viste - 2) process user filter:
+def process_filter(update, context):
+    try:
+        choice = answer_query(update, context, delete=True)
+        tlog.info(f"filter_supp: {choice}")
+    except:
+        choice = update.message.text.lower()
+    if choice == 'storico':
+            context.user_data['vista'] = 'storico ordini'
+    elif choice != 'no':
+        context.user_data['filter'] = choice
+    return get_vista(update, context)
+
+#viste - 3) extract vista:
+def get_vista(update, context):
+    choice = context.user_data.get('vista')
     msg = f"Estrazione vista in corso..."
     message = context.bot.send_message(chat_id=update.effective_chat.id, text=msg)
     #get vista:
-    choice = choice.lower()
     schema = context.user_data.get('schema')
-    filename = f'./data_cache/{schema}.{choice}.xlsx'
+    filter = context.user_data.get('filter')
+    filterstr = f"_{filter}" if filter else ""
+    filename = f'./data_cache/{schema}.{choice}{filterstr}.xlsx'
     #forker:
     if choice == 'prodotti':
-        ret = bot_functions.create_view_prodotti(schema, filename)
+        ret = bot_functions.create_view_prodotti(schema, filename, filter)
     elif choice == 'recap':
         ret = bot_functions.create_view_recap(schema, filename)
     elif choice == 'storico ordini':
         ret = bot_functions.create_view_storicoordini(schema, filename)
     elif choice == 'lista ordine':
-        ret = bot_functions.create_view_listaordine(schema, filename, supplier="aboca")
+        try:
+            ordcode = int(filter)
+            supplier = None
+        except:
+            ordcode = None
+            supplier = filter
+        ret = bot_functions.create_view_listaordine(schema, filename, supplier=supplier, codiceord=ordcode)
     else:
         context.bot.delete_message(chat_id=update.effective_chat.id, message_id=message.message_id)
         msg = f"Ok. A presto!"
         message = context.bot.send_message(chat_id=update.effective_chat.id, text=msg)
         context.user_data["last_sent"] = message.message_id
+        context.user_data['filter'] = None
         return CONV_END
-        
     context.bot.delete_message(chat_id=update.effective_chat.id, message_id=message.message_id)
+    context.user_data['filter'] = None
     if ret == 0:
         #3) send file to user:
         xlsx = open(filename, 'rb')
@@ -1202,10 +1253,11 @@ def get_vista(update, context, choice):
         context.bot.send_document(chat_id, xlsx)
         os.remove(filename)
     else:
-        msg = f"C'è stato un problema col mio DB, ti chiedo scusa!"
+        msg = f"Non ho trovato viste corrispondenti. Rilancia il comando /vista per riprovare."
         message = context.bot.send_message(chat_id=update.effective_chat.id, text=msg)
         context.user_data["last_sent"] = message.message_id
         return CONV_END
+
 
 #GENERIC HANDLERS:
 #default reply:
@@ -1385,6 +1437,11 @@ def main() -> None:
                 CommandHandler('esci', esci),
                 MessageHandler(Filters.regex("^(Esci|esci|Annulla|annulla|Stop|stop)$"), esci),
                 CallbackQueryHandler(process_menu, pattern='.*')],
+            PROCESS_FILTER: [
+                CommandHandler('esci', esci),
+                MessageHandler(Filters.regex("^(Esci|esci|Annulla|annulla|Stop|stop)$"), esci),
+                CallbackQueryHandler(process_filter, pattern='.*'),
+                MessageHandler(Filters.text, process_filter)],
         },
         fallbacks=[CommandHandler('error', error)],
         allow_reentry=True)
