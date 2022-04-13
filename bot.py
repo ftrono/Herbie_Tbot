@@ -310,10 +310,10 @@ def pulisci(update, context):
 #"/prodotto":
 #prodotto - 1) ask p_code mode: text or photo:
 def prodotto(update, context):
-    msg = f"Per iniziare, devo <b>identificare un prodotto</b>. Puoi:\n"+\
-            f"- Inviarmi una <b>FOTO</b> del codice a barre, oppure\n"+\
-            f"- Inviarmi il <b>NOME</b> del prodotto, oppure\n"+\
-            f"- Trascrivermi il codice a barre via <b>TESTO</b> (SENZA spazi)."
+    msg = f"Per iniziare, mi serve un <b>codice a barre</b>. Puoi:\n"+\
+            f"- Inviarmi una <b>FOTO</b> del barcode, oppure\n"+\
+            f"- Trascrivermi il codice via <b>TESTO</b> (SENZA spazi).\n\n"+\
+            f"Se il prodotto è già registrato, puoi anche inviarmi in alternativa il <b>nome</b> del prodotto, te lo cercherò nel magazzino."
     message = context.bot.send_message(chat_id=update.effective_chat.id, text=msg,
         parse_mode=ParseMode.HTML)
     context.user_data["last_sent"] = message.message_id
@@ -450,8 +450,8 @@ def process_pcode(update, context):
             f"- Prezzo: <i>{Matches['prezzo'].iloc[0]:.2f}€</i>\n"+\
             f"- Numero di pezzi: <i>{Matches['quantita'].iloc[0]}</i>\n"+\
             f"\nCosa vuoi fare?"
-        keyboard = [[InlineKeyboardButton('Modifica info', callback_data='Modifica info')],
-                    [InlineKeyboardButton('Aggiungi info', callback_data='Aggiungi info')],
+        keyboard = [[InlineKeyboardButton('Modifica info di base', callback_data='Modifica info')],
+                    [InlineKeyboardButton('Questionario dettagli', callback_data='Aggiungi info')],
                     [InlineKeyboardButton('Annulla', callback_data='Annulla')]]
         message.edit_text(msg,
             parse_mode=ParseMode.HTML,
