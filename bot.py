@@ -129,7 +129,7 @@ def set_auth(update, context):
     schema = db_interactor.register_auth(chat_id, otp)
     #a) no match -> conv_end:
     if schema == -1:
-        msg = f"Non ho riconosciuto l'OTP.\n\n{ask_register}"
+        msg = f"Registrazione non avvenuta. Controlla le tue autorizzazioni usando /start.\n\n{ask_register}"
         message.edit_text(msg)
         return CONV_END
     else:

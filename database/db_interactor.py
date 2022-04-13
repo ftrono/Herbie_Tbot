@@ -32,6 +32,7 @@ def get_auths(chat_id):
 
 #register new user authorization:
 def register_auth(chat_id, otp):
+    schema = -1
     try:
         conn, cursor = db_connect()
         #1) query for Schema corresponding to the OTP:
