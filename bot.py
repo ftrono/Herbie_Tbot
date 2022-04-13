@@ -1135,10 +1135,11 @@ def ask_filter(update, context):
     choice = context.user_data.get('vista')
     schema = context.user_data.get('schema')
     if choice == 'prodotti':
-        msg = f"Vuoi estrarre i dati solo di uno specifico <b>produttore</b>? Se sì, seleziona un produttore dai suggerimenti.\n\n"+\
-                f"Altrimenti, inviami <b>NO</b> e ti estrarrò tutto il magazzino prodotti.\n\nOppure usa /esci per uscire."
+        msg = f"Vuoi estrarre le giacenze solo di uno specifico <b>produttore</b> o vuoi la <b>vista intera</b> delle giacenze?\n\nOppure usa /esci per uscire."
         #supplier picker:
-        keyboard = bot_functions.inline_picker(schema, 'produttore')
+        keyboard = [[InlineKeyboardButton('VISTA COMPLETA', callback_data='all')]]
+        temp = bot_functions.inline_picker(schema, 'produttore')
+        keyboard = keyboard + temp
         message = context.bot.send_message(chat_id=update.effective_chat.id, text=msg, 
             parse_mode=ParseMode.HTML, 
             reply_markup=InlineKeyboardMarkup(keyboard))
@@ -1146,9 +1147,11 @@ def ask_filter(update, context):
         return PROCESS_FILTER
     elif choice == 'lista ordine':
         msg = f"Vuoi l'ultima lista ordini di uno specifico <b>produttore</b>? Se sì, seleziona un produttore dai suggerimenti.\n\n"+\
-                f"Altrimenti inviami un <b>codice ordine</b>. Se non conosci il codice ordine, inviami la parola <b>STORICO</b>, ti estrarrò tutto lo storico ordini.\n\nOppure usa /esci per uscire."
+                f"Altrimenti inviami un <b>codice ordine</b>. Se non conosci il codice ordine, puoi estrarre lo <B>storico degli ordini</b> intero.\n\nOppure usa /esci per uscire."
         #supplier picker:
-        keyboard = bot_functions.inline_picker(schema, 'produttore')
+        keyboard = [[InlineKeyboardButton('STORICO ORDINI', callback_data='storico')]]
+        temp = bot_functions.inline_picker(schema, 'produttore')
+        keyboard = keyboard + temp
         message = context.bot.send_message(chat_id=update.effective_chat.id, text=msg, 
             parse_mode=ParseMode.HTML, 
             reply_markup=InlineKeyboardMarkup(keyboard))
@@ -1166,7 +1169,7 @@ def process_filter(update, context):
         choice = update.message.text.lower()
     if choice == 'storico':
             context.user_data['vista'] = 'storico ordini'
-    elif choice != 'no':
+    else:
         context.user_data['filter'] = choice
     return get_vista(update, context)
 
@@ -1178,6 +1181,7 @@ def get_vista(update, context):
     #get vista:
     schema = context.user_data.get('schema')
     filter = context.user_data.get('filter')
+    filter = filter if filter != 'all' else None
     filterstr = f"_{filter}" if filter else ""
     filename = f'./data_cache/{schema}.{choice}{filterstr}.xlsx'
     #forker:
@@ -1206,10 +1210,16 @@ def get_vista(update, context):
     context.user_data['filter'] = None
     if ret == 0:
         #3) send file to user:
-        xlsx = open(filename, 'rb')
-        chat_id=update.effective_chat.id
-        context.bot.send_document(chat_id, xlsx)
-        os.remove(filename)
+        try:
+            xlsx = open(filename, 'rb')
+            chat_id=update.effective_chat.id
+            context.bot.send_document(chat_id, xlsx)
+            os.remove(filename)
+        except:
+            msg = f"Non ho trovato dati. Rilancia il comando /vista per riprovare."
+            message = context.bot.send_message(chat_id=update.effective_chat.id, text=msg)
+            context.user_data["last_sent"] = message.message_id
+            return CONV_END
     else:
         msg = f"Non ho trovato viste corrispondenti. Rilancia il comando /vista per riprovare."
         message = context.bot.send_message(chat_id=update.effective_chat.id, text=msg)
