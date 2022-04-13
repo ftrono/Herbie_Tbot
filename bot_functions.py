@@ -1,9 +1,19 @@
-from telegram import Update, ParseMode, InlineKeyboardButton, InlineKeyboardMarkup
+from telegram import InlineKeyboardButton
 from pyzbar import pyzbar
 from PIL import Image
-from database.db_tools import db_connect, db_disconnect
 import database.db_interactor as db_interactor
+import database.db_export as db_export
 from globals import *
+
+#BOT_FUNCTIONS:
+#common data preparers for bot:
+# - extract_barcode()
+# - inline_picker()
+# - create_view_prodotti()
+# - create_view_recap()
+# - create_view_listaordine()
+# - create_view_storicoordini()
+
 
 #scan image for barcodes and extract pcode:
 def extract_barcode(image):
@@ -22,6 +32,7 @@ def extract_barcode(image):
             pass
     os.remove(image_name)
     return p_code
+
 
 #inline picker keyboard:
 def inline_picker(schema, column_name):
@@ -44,11 +55,13 @@ def inline_picker(schema, column_name):
     return keyboard
 
 
+#EXPORT:
+#view Prodotti:
 def create_view_prodotti(schema, filename, supplier=None):
     headers = {'Codice': 'codiceprod', 'Produttore': 'produttore', 'Nome': 'nome', 'Categoria': 'categoria', 'Quantita': 'quantita', 'Prezzo Pubblico €': 'prezzo', 'Sconto Medio %': 'scontomedio', 'IVA %': 'aliquota', 'Costo Acquisto €': 'costoacquisto', 'Costo Giacenze €': 'costototale', 'Valore Giacenze €': 'valoretotale', 'Disp Medico': 'dispmedico', 'Eta Minima': 'etaminima', ' Bio ': 'bio', ' Vegano ': 'vegano', 'Senza Glutine': 'senzaglutine', 'Senza Lattosio': 'senzalattosio', 'Senza Zucchero': 'senzazucchero'}
     #export table to pdf:
     try:
-        Prodotti = db_interactor.get_view_prodotti(schema, supplier)
+        Prodotti = db_export.get_view_prodotti(schema, supplier)
         if Prodotti.empty == False:
             #1) format adjustments:
             Vista = pd.DataFrame(columns=headers.keys())
@@ -110,12 +123,13 @@ def create_view_prodotti(schema, filename, supplier=None):
         tlog.exception(f"Export error for xslx Prodotti for schema {schema}. {Exception}")
         return -1
 
+
 #view Recap by produttore & categoria:
 def create_view_recap(schema, filename):
     headers = {'Produttore': 'produttore', 'Categoria': 'categoria', 'Sconto Medio %': 'scontomedio', 'IVA %': 'aliquota', 'Quantita': 'quantita', 'Costo Giacenze €': 'costototale', 'Valore Giacenze €': 'valoretotale'}
     #export table to pdf:
     try:
-        Recap = db_interactor.get_view_recap(schema)
+        Recap = db_export.get_view_recap(schema)
         if Recap.empty == False:
             #1) format adjustments:
             Vista = pd.DataFrame(columns=headers.keys())
@@ -163,6 +177,7 @@ def create_view_recap(schema, filename):
         tlog.exception(f"Export error for xslx Recap for schema {schema}. {Exception}")
         return -1
 
+
 #view ListaOrdine by produttore or codiceord:
 def create_view_listaordine(schema, filename, supplier=None, codiceord=None):
     if not supplier and not codiceord:
@@ -171,7 +186,7 @@ def create_view_listaordine(schema, filename, supplier=None, codiceord=None):
     headers = {'Codice Prodotto': 'codiceprod', 'Produttore': 'produttore', 'Nome': 'nome', 'Categoria': 'categoria', 'Quantita Ordine': 'quantita', 'Prezzo Pubblico €': 'prezzo', 'Sconto Medio %': 'scontomedio', 'IVA %': 'aliquota', 'Costo Acquisto €': 'costoacquisto', 'Costo Totale €': 'costototale', 'Valore Totale €': 'valoretotale'}
     #export table to pdf:
     try:
-        ListaOrdine = db_interactor.get_view_listaordine(schema, supplier=supplier, codiceord=codiceord)
+        ListaOrdine = db_export.get_view_listaordine(schema, supplier=supplier, codiceord=codiceord)
         if ListaOrdine.empty == False:
             #1) format adjustments:
             Vista = pd.DataFrame(columns=headers.keys())
@@ -238,12 +253,13 @@ def create_view_listaordine(schema, filename, supplier=None, codiceord=None):
         tlog.exception(f"Export error for xslx ListaOrdine {codiceord if codiceord else supplier} for schema {schema}. {Exception}")
         return -1
 
+
 #view StoricoOrdini:
 def create_view_storicoordini(schema, filename):
     headers = {'Codice Ordine': 'codiceord', 'Produttore': 'produttore', 'Riferimento': 'riferimento', 'Data Modifica': 'datamodifica', 'Data Inoltro': 'datainoltro', 'Data Ricezione': 'dataricezione'}
     #export table to pdf:
     try:
-        Storico = db_interactor.get_view_storicoordini(schema)
+        Storico = db_export.get_view_storicoordini(schema)
         if Storico.empty == False:
             #1) format adjustments:
             Vista = pd.DataFrame(columns=headers.keys())
