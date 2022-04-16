@@ -963,14 +963,16 @@ def process_vegan(update, context):
         context.user_data["last_sent"] = message.message_id
         return CONV_END
     else:
-        #if a product is vegan, it does not have lactose -> skip state "nolactose":
+        #if a product is vegan, it does not have lactose -> skip state "nolactose" (the DB will auto update 'senzalattosio'):
         if choice == 'Sì':
+            choicestr = "Vegano e Senza Lattosio"
             feat = f"senza glutine"
             next_state = PROCESS_NOGLUTEN
         else:
+            choicestr = 'No'
             feat = f"senza lattosio"
             next_state = PROCESS_NOLACTOSE
-        msg = f"Segnato {choice}. Prossima:\n\n- Il prodotto è <b>{feat}</b>?"
+        msg = f"Segnato {choicestr}. Prossima:\n\n- Il prodotto è <b>{feat}</b>?"
         keyboard = [[InlineKeyboardButton('Sì', callback_data='Sì'),
                     InlineKeyboardButton('No', callback_data='No')]]
         message = context.bot.send_message(chat_id=update.effective_chat.id, text=msg,

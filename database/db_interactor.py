@@ -173,11 +173,17 @@ def register_prodinfo(schema, info):
 #add a detail info for a product:
 def add_detail(schema, p_code, colname, value):
     try:
+        #if a product is vegan, it does not have lactose -> auto update senzalattosio:
+        if colname == 'vegano' and value == True:
+            addstr = f", senzalattosio = TRUE "
+        else:
+            addstr = ""
+        #set values:
         conn, cursor = db_connect()
-        query = f"UPDATE {schema}.prodotti SET {colname} = {value} WHERE codiceprod = {p_code}"
+        query = f"UPDATE {schema}.prodotti SET {colname} = {value}{addstr} WHERE codiceprod = {p_code}"
         cursor.execute(query)
         conn.commit()
-        dlog.info(f"Set {colname} = {value} for product {p_code} in table {schema}.prodotti.")
+        dlog.info(f"Set {colname} = {value}{addstr} for product {p_code} in table {schema}.prodotti.")
         db_disconnect(conn, cursor)
         return 0
     except psycopg2.Error as e:
