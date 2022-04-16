@@ -14,8 +14,8 @@ START, SET_AUTH = range(0, 2)
 PICK_WH, PROCESS_MENU, PROCESS_PCODE, ASK_ALIQUOTA, INIT_ADD = range(0, 5)
 PROCESS_SUPPLIER, ASK_DISCOUNT, SAVE_SUPPLIER, PROCESS_PNAME, PROCESS_CATEGORY = range(5, 10)
 ASK_ALIQUOTA, SAVE_CATEGORY, PROCESS_PRICE, PROCESS_PIECES, SAVE_EDIT = range(10, 15)
-NEXT_STEP, EDIT_INFO, PROCESS_DISP_MEDICO, PROCESS_MIN_AGE, PROCESS_BIO = range(15, 20)
-PROCESS_VEGAN, PROCESS_NOGLUTEN, PROCESS_NOLACTOSE, PROCESS_NOSUGAR, PROCESS_FILTER, CLEAN_DB = range(20, 26)
+NEXT_STEP, EDIT_INFO, PROCESS_VEGAN, PROCESS_NOLACTOSE, PROCESS_NOGLUTEN = range(15, 20)
+PROCESS_NOSUGAR, PROCESS_FILTER, CLEAN_DB = range(20, 23)
 CONV_END = -1 #value of ConversationHandler.END
 
 #default messages:
@@ -878,9 +878,9 @@ def next_step(update, context):
     # - process_pcode() -> asks options "Edit info", "Add info", "Cancel"
     # - save_to_db() -> asks options "Yes" or "No" to the question "Add info"
 
-    #trigger ADD INFO -> start asking the price:
+    #trigger ADD INFO -> start asking the details:
     if choice == "Sì" or choice == "Aggiungi info":
-        return ask_disp_medico(update, context)
+        return ask_vegan(update, context)
     
     #trigger EXIT:
     elif choice == "No" or choice == "Annulla":
@@ -934,101 +934,19 @@ def edit_info(update, context):
 
 
 #ADD EXTRA INFO:
-#extra - 1) ask bool disp medico:
-def ask_disp_medico(update, context):
+#extra - 1) ask bool vegan:
+def ask_vegan(update, context):
     msg = f"Ti farò una serie di brevi domande. Puoi interrompere quando vuoi cliccando su /esci.\n\n"+\
-            f"1) Il prodotto è un <b>dispositivo medico</b>?"
+            f"1) Il prodotto è <b>vegano</b>?"
     keyboard = [[InlineKeyboardButton('Sì', callback_data='Sì'),
                 InlineKeyboardButton('No', callback_data='No')]]
     message = context.bot.send_message(chat_id=update.effective_chat.id, text=msg,
         parse_mode=ParseMode.HTML,
         reply_markup=InlineKeyboardMarkup(keyboard))
     context.user_data["last_sent"] = message.message_id
-    return PROCESS_DISP_MEDICO
+    return PROCESS_VEGAN
 
-#extra - 2) save disp_medico and ask min_age:
-def process_disp_medico(update, context):
-    #get answer from open query:
-    choice = answer_query(update, context)
-    tlog.info(choice)
-    #save new data to DB:
-    schema = context.user_data['schema']
-    p_code = context.user_data['p_code']
-    colname = 'dispmedico'
-    value = True if choice == 'Sì' else False
-    ret = db_interactor.add_detail(schema, p_code, colname, value)
-    if ret == -1:
-        msg = f"C'è stato un problema col mio DB, ti chiedo scusa!"
-        message = context.bot.send_message(chat_id=update.effective_chat.id, text=msg)
-        context.user_data["last_sent"] = message.message_id
-        return CONV_END
-    else:
-        msg = f"Segnato {choice}. Prossima:\n\n2) Qual è l'<b>età minima</b> per l'assunzione del prodotto?\n"+\
-                f"Scrivimi solo l'età <i>in cifre</i> (es. 18, 3, 0, ...)"
-        message = context.bot.send_message(chat_id=update.effective_chat.id, text=msg,
-            parse_mode=ParseMode.HTML)
-        context.user_data["last_sent"] = message.message_id
-        return PROCESS_MIN_AGE
-
-#extra - 3) save min_age and ask bool bio:
-def process_min_age(update, context):
-    #store answer from user message:
-    try:
-        age = int(update.message.text)
-    except:
-        msg = "Re-inviami soltanto l'età in cifre (es. 18, 3, 0...).\n\nOppure usa /esci per uscire."
-        message = context.bot.send_message(chat_id=update.effective_chat.id, text=msg)
-        context.user_data["last_sent"] = message.message_id
-        return PROCESS_MIN_AGE
-
-    #save new data to DB:
-    schema = context.user_data['schema']
-    p_code = context.user_data['p_code']
-    colname = 'etaminima'
-    ret = db_interactor.add_detail(schema, p_code, colname, age)
-    if ret == -1:
-        msg = f"C'è stato un problema col mio DB, ti chiedo scusa!"
-        message = context.bot.send_message(chat_id=update.effective_chat.id, text=msg)
-        context.user_data["last_sent"] = message.message_id
-        return CONV_END
-    else:
-        agestr = "anno" if age == 1 else f"anni"
-        msg = f"Segnato {age} {agestr}. Prossima:\n\n3) Il prodotto è <b>biologico</b>?"
-        keyboard = [[InlineKeyboardButton('Sì', callback_data='Sì'),
-                    InlineKeyboardButton('No', callback_data='No')]]
-        message = context.bot.send_message(chat_id=update.effective_chat.id, text=msg,
-            parse_mode=ParseMode.HTML,
-            reply_markup=InlineKeyboardMarkup(keyboard))
-        context.user_data["last_sent"] = message.message_id
-        return PROCESS_BIO
-
-#extra - 4) save bio and ask bool vegan:
-def process_bio(update, context):
-    #get answer from open query:
-    choice = answer_query(update, context)
-    tlog.info(choice)
-    #save new data to DB:
-    schema = context.user_data['schema']
-    p_code = context.user_data['p_code']
-    colname = 'bio'
-    value = True if choice == 'Sì' else False
-    ret = db_interactor.add_detail(schema, p_code, colname, value)
-    if ret == -1:
-        msg = f"C'è stato un problema col mio DB, ti chiedo scusa!"
-        message = context.bot.send_message(chat_id=update.effective_chat.id, text=msg)
-        context.user_data["last_sent"] = message.message_id
-        return CONV_END
-    else:
-        msg = f"Segnato {choice}. Prossima:\n\n4) Il prodotto è <b>vegano</b>?"
-        keyboard = [[InlineKeyboardButton('Sì', callback_data='Sì'),
-                    InlineKeyboardButton('No', callback_data='No')]]
-        message = context.bot.send_message(chat_id=update.effective_chat.id, text=msg,
-            parse_mode=ParseMode.HTML,
-            reply_markup=InlineKeyboardMarkup(keyboard))
-        context.user_data["last_sent"] = message.message_id
-        return PROCESS_VEGAN
-
-#extra - 5) save vegan and ask bool nogluten:
+#extra - 2) save vegan and ask bool nolactose:
 def process_vegan(update, context):
     #get answer from open query:
     choice = answer_query(update, context)
@@ -1045,33 +963,7 @@ def process_vegan(update, context):
         context.user_data["last_sent"] = message.message_id
         return CONV_END
     else:
-        msg = f"Segnato {choice}. Prossima:\n\n5) Il prodotto è <b>senza glutine</b>?"
-        keyboard = [[InlineKeyboardButton('Sì', callback_data='Sì'),
-                    InlineKeyboardButton('No', callback_data='No')]]
-        message = context.bot.send_message(chat_id=update.effective_chat.id, text=msg,
-            parse_mode=ParseMode.HTML,
-            reply_markup=InlineKeyboardMarkup(keyboard))
-        context.user_data["last_sent"] = message.message_id
-        return PROCESS_NOGLUTEN
-
-#extra - 6) save nogluten and ask bool nolactose:
-def process_nogluten(update, context):
-    #get answer from open query:
-    choice = answer_query(update, context)
-    tlog.info(choice)
-    #save new data to DB:
-    schema = context.user_data['schema']
-    p_code = context.user_data['p_code']
-    colname = 'senzaglutine'
-    value = True if choice == 'Sì' else False
-    ret = db_interactor.add_detail(schema, p_code, colname, value)
-    if ret == -1:
-        msg = f"C'è stato un problema col mio DB, ti chiedo scusa!"
-        message = context.bot.send_message(chat_id=update.effective_chat.id, text=msg)
-        context.user_data["last_sent"] = message.message_id
-        return CONV_END
-    else:
-        msg = f"Segnato {choice}. Prossima:\n\n6) Il prodotto è <b>senza lattosio</b>?"
+        msg = f"Segnato {choice}. Prossima:\n\n2) Il prodotto è <b>senza lattosio</b>?"
         keyboard = [[InlineKeyboardButton('Sì', callback_data='Sì'),
                     InlineKeyboardButton('No', callback_data='No')]]
         message = context.bot.send_message(chat_id=update.effective_chat.id, text=msg,
@@ -1080,7 +972,7 @@ def process_nogluten(update, context):
         context.user_data["last_sent"] = message.message_id
         return PROCESS_NOLACTOSE
 
-#extra - 7) save nolactose and ask bool nosugar:
+#extra - 3) save nolactose and ask bool nogluten:
 def process_nolactose(update, context):
     #get answer from open query:
     choice = answer_query(update, context)
@@ -1097,7 +989,33 @@ def process_nolactose(update, context):
         context.user_data["last_sent"] = message.message_id
         return CONV_END
     else:
-        msg = f"Segnato {choice}. Prossima:\n\n7) Il prodotto è <b>senza zucchero</b>?"
+        msg = f"Segnato {choice}. Prossima:\n\n3) Il prodotto è <b>senza glutine</b>?"
+        keyboard = [[InlineKeyboardButton('Sì', callback_data='Sì'),
+                    InlineKeyboardButton('No', callback_data='No')]]
+        message = context.bot.send_message(chat_id=update.effective_chat.id, text=msg,
+            parse_mode=ParseMode.HTML,
+            reply_markup=InlineKeyboardMarkup(keyboard))
+        context.user_data["last_sent"] = message.message_id
+        return PROCESS_NOGLUTEN
+
+#extra - 4) save nogluten and ask bool nosugar:
+def process_nogluten(update, context):
+    #get answer from open query:
+    choice = answer_query(update, context)
+    tlog.info(choice)
+    #save new data to DB:
+    schema = context.user_data['schema']
+    p_code = context.user_data['p_code']
+    colname = 'senzaglutine'
+    value = True if choice == 'Sì' else False
+    ret = db_interactor.add_detail(schema, p_code, colname, value)
+    if ret == -1:
+        msg = f"C'è stato un problema col mio DB, ti chiedo scusa!"
+        message = context.bot.send_message(chat_id=update.effective_chat.id, text=msg)
+        context.user_data["last_sent"] = message.message_id
+        return CONV_END
+    else:
+        msg = f"Segnato {choice}. Prossima:\n\n4) Il prodotto è <b>senza zucchero</b>?"
         keyboard = [[InlineKeyboardButton('Sì', callback_data='Sì'),
                     InlineKeyboardButton('No', callback_data='No')]]
         message = context.bot.send_message(chat_id=update.effective_chat.id, text=msg,
@@ -1106,7 +1024,7 @@ def process_nolactose(update, context):
         context.user_data["last_sent"] = message.message_id
         return PROCESS_NOSUGAR
 
-#extra - 8) save nosugar and end:
+#extra - 5) save nosugar and end:
 def process_nosugar(update, context):
     #get answer from open query:
     choice = answer_query(update, context)
@@ -1396,30 +1314,18 @@ def main() -> None:
                 CommandHandler('esci', esci),
                 MessageHandler(Filters.regex("^(Esci|esci|Annulla|annulla|Stop|stop)$"), esci),
                 CallbackQueryHandler(edit_info, pattern='.*')],
-            PROCESS_DISP_MEDICO: [
-                CommandHandler('esci', esci),
-                MessageHandler(Filters.regex("^(Esci|esci|Annulla|annulla|Stop|stop)$"), esci),
-                CallbackQueryHandler(process_disp_medico, pattern='.*')],
-            PROCESS_MIN_AGE: [
-                CommandHandler('esci', esci),
-                MessageHandler(Filters.regex("^(Esci|esci|Annulla|annulla|Stop|stop)$"), esci),
-                MessageHandler(Filters.text, process_min_age)],
-            PROCESS_BIO: [
-                CommandHandler('esci', esci),
-                MessageHandler(Filters.regex("^(Esci|esci|Annulla|annulla|Stop|stop)$"), esci),
-                CallbackQueryHandler(process_bio, pattern='.*')],
             PROCESS_VEGAN: [
                 CommandHandler('esci', esci),
                 MessageHandler(Filters.regex("^(Esci|esci|Annulla|annulla|Stop|stop)$"), esci),
                 CallbackQueryHandler(process_vegan, pattern='.*')],
-            PROCESS_NOGLUTEN: [
-                CommandHandler('esci', esci),
-                MessageHandler(Filters.regex("^(Esci|esci|Annulla|annulla|Stop|stop)$"), esci),
-                CallbackQueryHandler(process_nogluten, pattern='.*')],
             PROCESS_NOLACTOSE: [
                 CommandHandler('esci', esci),
                 MessageHandler(Filters.regex("^(Esci|esci|Annulla|annulla|Stop|stop)$"), esci),
                 CallbackQueryHandler(process_nolactose, pattern='.*')],
+            PROCESS_NOGLUTEN: [
+                CommandHandler('esci', esci),
+                MessageHandler(Filters.regex("^(Esci|esci|Annulla|annulla|Stop|stop)$"), esci),
+                CallbackQueryHandler(process_nogluten, pattern='.*')],
             PROCESS_NOSUGAR: [
                 CommandHandler('esci', esci),
                 MessageHandler(Filters.regex("^(Esci|esci|Annulla|annulla|Stop|stop)$"), esci),
