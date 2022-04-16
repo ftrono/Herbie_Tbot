@@ -409,7 +409,7 @@ def process_pcode(update, context):
             f"- Numero di pezzi: <i>{Matches['quantita'].iloc[0]}</i>\n"+\
             f"\nCosa vuoi fare?"
         keyboard = [[InlineKeyboardButton('Modifica info di base', callback_data='Modifica info')],
-                    [InlineKeyboardButton('Questionario dettagli', callback_data='Aggiungi info')],
+                    [InlineKeyboardButton('Modifica vegano/allergeni', callback_data='Modifica allergeni')],
                     [InlineKeyboardButton('Annulla', callback_data='Annulla')]]
         message.edit_text(msg,
             parse_mode=ParseMode.HTML,
@@ -857,8 +857,8 @@ def save_to_db(update, context):
             context.user_data["last_sent"] = message.message_id
             return CONV_END
         else:
-            msg = f"Ti ho salvato il prodotto nel magazzino!\n\nVuoi che ti faccia qualche altra domanda per categorizzare meglio il prodotto?"
-            keyboard = [[InlineKeyboardButton('Sì', callback_data='Aggiungi info'),
+            msg = f"Ti ho salvato il prodotto nel magazzino!\n\nVuoi registrare ora se è vegano o contiene allergeni?"
+            keyboard = [[InlineKeyboardButton('Sì', callback_data='Modifica allergeni'),
                         InlineKeyboardButton('No', callback_data='No')]]
             message = context.bot.send_message(chat_id=update.effective_chat.id, text=msg,
                 reply_markup=InlineKeyboardMarkup(keyboard))
@@ -878,8 +878,8 @@ def next_step(update, context):
     # - process_pcode() -> asks options "Edit info", "Add info", "Cancel"
     # - save_to_db() -> asks options "Yes" or "No" to the question "Add info"
 
-    #trigger ADD INFO -> start asking the details:
-    if choice == "Sì" or choice == "Aggiungi info":
+    #trigger ADD INFO -> start asking if vegan / has allergens:
+    if choice == "Sì" or choice == "Modifica allergeni":
         return ask_vegan(update, context)
     
     #trigger EXIT:
@@ -937,7 +937,7 @@ def edit_info(update, context):
 #extra - 1) ask bool vegan:
 def ask_vegan(update, context):
     msg = f"Ti farò una serie di brevi domande. Puoi interrompere quando vuoi cliccando su /esci.\n\n"+\
-            f"1) Il prodotto è <b>vegano</b>?"
+            f"- Il prodotto è <b>vegano</b>?"
     keyboard = [[InlineKeyboardButton('Sì', callback_data='Sì'),
                 InlineKeyboardButton('No', callback_data='No')]]
     message = context.bot.send_message(chat_id=update.effective_chat.id, text=msg,
@@ -963,14 +963,21 @@ def process_vegan(update, context):
         context.user_data["last_sent"] = message.message_id
         return CONV_END
     else:
-        msg = f"Segnato {choice}. Prossima:\n\n2) Il prodotto è <b>senza lattosio</b>?"
+        #if a product is vegan, it does not have lactose -> skip state "nolactose":
+        if choice == 'Sì':
+            feat = f"senza glutine"
+            next_state = PROCESS_NOGLUTEN
+        else:
+            feat = f"senza lattosio"
+            next_state = PROCESS_NOLACTOSE
+        msg = f"Segnato {choice}. Prossima:\n\n- Il prodotto è <b>{feat}</b>?"
         keyboard = [[InlineKeyboardButton('Sì', callback_data='Sì'),
                     InlineKeyboardButton('No', callback_data='No')]]
         message = context.bot.send_message(chat_id=update.effective_chat.id, text=msg,
             parse_mode=ParseMode.HTML,
             reply_markup=InlineKeyboardMarkup(keyboard))
         context.user_data["last_sent"] = message.message_id
-        return PROCESS_NOLACTOSE
+        return next_state
 
 #extra - 3) save nolactose and ask bool nogluten:
 def process_nolactose(update, context):
@@ -989,7 +996,7 @@ def process_nolactose(update, context):
         context.user_data["last_sent"] = message.message_id
         return CONV_END
     else:
-        msg = f"Segnato {choice}. Prossima:\n\n3) Il prodotto è <b>senza glutine</b>?"
+        msg = f"Segnato {choice}. Prossima:\n\n- Il prodotto è <b>senza glutine</b>?"
         keyboard = [[InlineKeyboardButton('Sì', callback_data='Sì'),
                     InlineKeyboardButton('No', callback_data='No')]]
         message = context.bot.send_message(chat_id=update.effective_chat.id, text=msg,
@@ -1015,7 +1022,7 @@ def process_nogluten(update, context):
         context.user_data["last_sent"] = message.message_id
         return CONV_END
     else:
-        msg = f"Segnato {choice}. Prossima:\n\n4) Il prodotto è <b>senza zucchero</b>?"
+        msg = f"Segnato {choice}. Prossima:\n\n- Il prodotto è <b>senza zucchero</b>?"
         keyboard = [[InlineKeyboardButton('Sì', callback_data='Sì'),
                     InlineKeyboardButton('No', callback_data='No')]]
         message = context.bot.send_message(chat_id=update.effective_chat.id, text=msg,
