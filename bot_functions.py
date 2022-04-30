@@ -256,7 +256,7 @@ def create_view_listaordine(schema, filename, supplier=None, codiceord=None):
 
 #view StoricoOrdini:
 def create_view_storicoordini(schema, filename):
-    headers = {'Codice Ordine': 'codiceord', 'Produttore': 'produttore', 'Riferimento': 'riferimento', 'Data Modifica': 'datamodifica', 'Data Inoltro': 'datainoltro', 'Data Ricezione': 'dataricezione'}
+    headers = {'Codice Ordine': 'codiceord', 'Produttore': 'produttore', 'Data Modifica': 'datamodifica', 'Data Inoltro': 'datainoltro', 'Data Ricezione': 'dataricezione'}
     #export table to pdf:
     try:
         Storico = db_export.get_view_storicoordini(schema)

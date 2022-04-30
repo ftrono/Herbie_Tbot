@@ -91,7 +91,6 @@ def create_schema_tables(conn, cursor, schema):
         'StoricoOrdini': f'''CREATE TABLE {schema}.StoricoOrdini (
             CodiceOrd BIGINT NOT NULL,
             Produttore VARCHAR(50) NOT NULL,
-            Riferimento TEXT,
             DataModifica VARCHAR(10) NOT NULL,
             DataInoltro VARCHAR(10),
             DataRicezione VARCHAR(10),
