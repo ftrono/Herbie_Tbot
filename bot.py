@@ -196,7 +196,7 @@ def main_menu(update, context, schema):
     else:
         #/vista:
         actionstr = f"Quale vista vuoi estrarre?"
-        buttons = ['Prodotti', 'Recap', 'Storico ordini', 'Lista ordine', 'Esci']
+        buttons = ['Prodotti', 'Recap', 'Lista ordine', 'Esci']
     msg = f"Ciao! Sei nel magazzino di <b>{schema.upper()}</b>.\n\n🤖📦✏ <b>{actionstr}</b>"
     keyboard = []
     for button in buttons:
@@ -237,7 +237,10 @@ def process_menu(update, context):
             context.user_data["last_sent"] = message.message_id
             return CONV_END
         else:
-            context.user_data['vista'] = choice.lower()
+            choice = choice.lower()
+            if choice == 'lista ordine':
+                choice = 'lista'
+            context.user_data['vista'] = choice
             return ask_filter(update, context)
 
 #"/aggiorna":
@@ -1098,13 +1101,15 @@ def ask_filter(update, context):
             reply_markup=InlineKeyboardMarkup(keyboard))
         context.user_data["last_sent"] = message.message_id
         return PROCESS_FILTER
-    elif choice == 'lista ordine':
-        msg = f"Vuoi l'ultima lista ordini di uno specifico <b>produttore</b>? Se sì, seleziona un produttore dai suggerimenti.\n\n"+\
-                f"Altrimenti inviami un <b>codice ordine</b>. Se non conosci il codice ordine, puoi estrarre lo <B>storico degli ordini</b> intero.\n\nOppure usa /esci per uscire."
-        #supplier picker:
-        keyboard = [[InlineKeyboardButton('STORICO ORDINI', callback_data='storico')]]
-        temp = bot_functions.inline_picker(schema, 'produttore')
-        keyboard = keyboard + temp
+    elif choice == 'lista':
+        msg = f"Seleziona una lista ordini da estrarre\n(formato: <i>'produttore - data ultima modifica - DEF (se definitiva)'</i>).\n\nOppure usa /esci per uscire."
+        #ordlist picker:
+        History = db_interactor.get_storicoordini(schema)
+        keyboard = []
+        for ind in History.index:
+            definitive = f" - DEF" if History['datamodifica'].iloc[ind] == True else ""
+            keystr = f"{History['produttore'].iloc[ind]} - {History['datamodifica'].iloc[ind]}{definitive}"
+            keyboard.append([InlineKeyboardButton(str(keystr), callback_data=str(History['codiceord'].iloc[ind]))])
         message = context.bot.send_message(chat_id=update.effective_chat.id, text=msg, 
             parse_mode=ParseMode.HTML, 
             reply_markup=InlineKeyboardMarkup(keyboard))
@@ -1116,14 +1121,11 @@ def ask_filter(update, context):
 #viste - 2) process user filter:
 def process_filter(update, context):
     try:
-        choice = answer_query(update, context, delete=True)
-        tlog.info(f"filter_supp: {choice}")
+        filter = answer_query(update, context, delete=True)
+        tlog.info(f"Filter: {filter}")
     except:
-        choice = update.message.text.lower()
-    if choice == 'storico':
-            context.user_data['vista'] = 'storico ordini'
-    else:
-        context.user_data['filter'] = choice
+        filter = update.message.text.lower()
+    context.user_data['filter'] = filter
     return get_vista(update, context)
 
 #viste - 3) extract vista:
@@ -1142,16 +1144,9 @@ def get_vista(update, context):
         ret = bot_functions.create_view_prodotti(schema, filename, filter)
     elif choice == 'recap':
         ret = bot_functions.create_view_recap(schema, filename)
-    elif choice == 'storico ordini':
-        ret = bot_functions.create_view_storicoordini(schema, filename)
-    elif choice == 'lista ordine':
-        try:
-            ordcode = int(filter)
-            supplier = None
-        except:
-            ordcode = None
-            supplier = filter
-        ret = bot_functions.create_view_listaordine(schema, filename, supplier=supplier, codiceord=ordcode)
+    elif choice == 'lista':
+        ordcode = int(filter)
+        ret = bot_functions.create_view_listaordine(schema, filename, ordcode)
     else:
         context.bot.delete_message(chat_id=update.effective_chat.id, message_id=message.message_id)
         msg = f"Ok. A presto!"

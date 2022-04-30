@@ -179,14 +179,11 @@ def create_view_recap(schema, filename):
 
 
 #view ListaOrdine by produttore or codiceord:
-def create_view_listaordine(schema, filename, supplier=None, codiceord=None):
-    if not supplier and not codiceord:
-        tlog.error(f"create_view_listaordine() needs either a supplier or an order code.")
-        return -1
+def create_view_listaordine(schema, filename, codiceord):
     headers = {'Codice Prodotto': 'codiceprod', 'Produttore': 'produttore', 'Nome': 'nome', 'Categoria': 'categoria', 'Quantita Ordine': 'quantita', 'Prezzo Pubblico €': 'prezzo', 'Sconto Medio %': 'scontomedio', 'IVA %': 'aliquota', 'Costo Acquisto €': 'costoacquisto', 'Costo Totale €': 'costototale', 'Valore Totale €': 'valoretotale'}
     #export table to pdf:
     try:
-        ListaOrdine = db_export.get_view_listaordine(schema, supplier=supplier, codiceord=codiceord)
+        ListaOrdine = db_export.get_view_listaordine(schema, codiceord)
         if ListaOrdine.empty == False:
             #1) format adjustments:
             Vista = pd.DataFrame(columns=headers.keys())
@@ -250,37 +247,5 @@ def create_view_listaordine(schema, filename, supplier=None, codiceord=None):
             writer.save()
         return 0
     except Exception:
-        tlog.exception(f"Export error for xslx ListaOrdine {codiceord if codiceord else supplier} for schema {schema}. {Exception}")
-        return -1
-
-
-#view StoricoOrdini:
-def create_view_storicoordini(schema, filename):
-    headers = {'Codice Ordine': 'codiceord', 'Produttore': 'produttore', 'Data Modifica': 'datamodifica', 'Data Inoltro': 'datainoltro', 'Data Ricezione': 'dataricezione'}
-    #export table to pdf:
-    try:
-        Storico = db_export.get_view_storicoordini(schema)
-        if Storico.empty == False:
-            #1) format adjustments:
-            Vista = pd.DataFrame(columns=headers.keys())
-            for col in Vista.columns:
-                if col == 'Codice Ordine':
-                    Vista[col] = [str(p_code) for p_code in Storico[headers[col]]]
-                else:
-                    Vista[col] = Storico[headers[col]]
-            Vista.reset_index(drop=True, inplace=True)
-
-            #2) export:
-            #load Pandas Excel exporter:
-            writer = pd.ExcelWriter(filename)
-            Vista.to_excel(writer, sheet_name=schema, index=False, na_rep='')
-            #auto-adjust columns' width:
-            for column in Vista:
-                column_width = max(Vista[column].astype(str).map(len).max(), len(column))
-                col_idx = Vista.columns.get_loc(column)
-                writer.sheets[schema].set_column(first_col=col_idx, last_col=col_idx, width=column_width)
-            writer.save()
-        return 0
-    except Exception:
-        tlog.exception(f"Export error for xslx StoricoOrdini for schema {schema}. {Exception}")
+        tlog.exception(f"Export error for xslx ListaOrdine {codiceord} for schema {schema}. {Exception}")
         return -1

@@ -92,11 +92,10 @@ def create_schema_tables(conn, cursor, schema):
             CodiceOrd BIGINT NOT NULL,
             Produttore VARCHAR(50) NOT NULL,
             DataModifica VARCHAR(10) NOT NULL,
-            DataInoltro VARCHAR(10),
-            DataRicezione VARCHAR(10),
+            Definitiva BOOLEAN NOT NULL DEFAULT FALSE,
             PRIMARY KEY (CodiceOrd)
             )''',
-            
+        
         'ListeOrdini': f'''CREATE TABLE {schema}.ListeOrdini (
             ID SERIAL NOT NULL,
             CodiceOrd BIGINT NOT NULL, 

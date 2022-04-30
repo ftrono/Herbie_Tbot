@@ -12,6 +12,7 @@ from database.db_tools import db_connect, db_disconnect
 # - add_detail()
 # - register_supplier()
 # - register_category()
+# - get_storicoordini()
 # - delete_prod()
 # - clean_db()
 
@@ -243,6 +244,19 @@ def register_category(schema, category, vat, new_name=None):
     except psycopg2.Error as e:
         dlog.error(f"Unable to register category {category} and vat rate {vat} to table {schema}.categorie. {e}")
         return -1
+
+
+#get Storico Ordini from DB:
+def get_storicoordini(schema):
+    History = pd.DataFrame()
+    try:
+        conn, cursor = db_connect()
+        query = f"SELECT * FROM {schema}.storicoordini ORDER BY datamodifica DESC"
+        History = pd.read_sql(query, conn)
+        db_disconnect(conn, cursor)
+    except psycopg2.Error as e:
+        dlog.error(f"Unable to perform get Storico Ordini from schema {schema}. {e}")
+    return History
 
 
 #delete a product from DB:
