@@ -25,9 +25,9 @@ def get_auths(chat_id):
         auths = pd.read_sql(query, conn)
         auths = auths['nomeschema'].unique().tolist()
         db_disconnect(conn, cursor)
-    except:
+    except Exception as e:
         auths = []
-        dlog.error(f"DB query error for Utenti.")
+        dlog.error(f"get_auths(): DB query error for Utenti. {e}")
     return auths
 
 
@@ -43,13 +43,13 @@ def register_auth(chat_id, otp):
         if match.empty == False:
             schema = match['nomeschema'].iloc[0]
             query = f"INSERT INTO utenti (ChatID, nomeschema) VALUES ({chat_id}, '{schema}')"
-            dlog.info(f"Added authorization for user {chat_id} to Schema: {schema}")
+            dlog.info(f"register_auth(): Added authorization for user {chat_id} to Schema: {schema}")
             cursor.execute(query)
             conn.commit()
         db_disconnect(conn, cursor)
         return schema
     except Exception as e:
-        dlog.error(f"DB query error in registering user {chat_id}. {e}")
+        dlog.error(f"register_auth(): DB query error in registering user {chat_id}. {e}")
         return -1
 
 
@@ -66,9 +66,9 @@ def get_column(schema, column_name):
         items = pd.read_sql(query, conn)
         items = items[column_name].to_list()
         db_disconnect(conn, cursor)
-    except:
+    except Exception as e:
         items = []
-        dlog.error(f"DB query error for all '{column_name}' items for schema {schema}.")
+        dlog.error(f"get_column(): DB query error for all '{column_name}' items for schema {schema}. {e}")
     return items
 
 
@@ -76,7 +76,7 @@ def get_column(schema, column_name):
 def match_product(schema, p_code=None, p_text=None):
     Prodotti = pd.DataFrame()
     if not p_code and not p_text:
-        dlog.error("match_product: no args for query.")
+        dlog.error("match_product(): no args for query.")
         return Prodotti
     
     #a) if p_code is available -> directly extract the matching product (direct match):
@@ -88,7 +88,7 @@ def match_product(schema, p_code=None, p_text=None):
             Prodotti = pd.read_sql(query, conn)
             db_disconnect(conn, cursor)
         except Exception as e:
-            dlog.error(f"DB query error for 'p_code'. {e}")
+            dlog.error(f"match_product(): DB query error for 'p_code'. {e}")
         return Prodotti
     
     #b) tokenize p_text to extract p_name and find best matches in DB:
@@ -99,7 +99,7 @@ def match_product(schema, p_code=None, p_text=None):
             Prodotti = pd.read_sql(query, conn)
             db_disconnect(conn, cursor)
         except Exception as e:
-            dlog.error(f"DB query error for 'p_code'.")
+            dlog.error(f"match_product(): DB query error for 'p_code'. {e}")
             return Prodotti
         
         #count matches for each name:
@@ -138,11 +138,11 @@ def add_prod(schema, info):
         query = f"INSERT INTO {schema}.prodotti (codiceprod, produttore, nome, categoria, quantita, prezzo) VALUES ({info['p_code']}, '{info['supplier']}', '{info['p_name']}', '{info['category']}', {info['pieces']}, {info['price']})"
         cursor.execute(query)
         conn.commit()
-        dlog.info(f"Added product {info['p_code']} to table {schema}.prodotti.")
+        dlog.info(f"add_prod(): Added product {info['p_code']} to table {schema}.prodotti.")
         db_disconnect(conn, cursor)
         return 0
     except psycopg2.Error as e:
-        dlog.warning(f"Product {info['p_code']} already existing in table {schema}.prodotti, or other exception. {e}")
+        dlog.warning(f"add_prod(): Product {info['p_code']} already existing in table {schema}.prodotti, or other exception. {e}")
         return -1
 
 
@@ -159,15 +159,15 @@ def register_prodinfo(schema, info):
                 query = f"UPDATE {schema}.prodotti SET produttore = '{info['supplier']}', nome = '{info['p_name']}', categoria = '{info['category']}', quantita = {info['pieces']}, prezzo = {info['price']} WHERE codiceprod = {info['p_code']}"
                 cursor.execute(query)
                 conn.commit()
-                dlog.info(f"Updated basic info for product {info['p_code']} in table {schema}.prodotti.")
+                dlog.info(f"register_prodinfo(): Updated basic info for product {info['p_code']} in table {schema}.prodotti.")
                 ret = 0
                 db_disconnect(conn, cursor)
             except psycopg2.Error as e:
-                dlog.error(f"Unable to add product {info['p_code']} to table {schema}.prodotti. {e}")
+                dlog.error(f"register_prodinfo(): Unable to update basic info for product {info['p_code']} in table {schema}.prodotti. {e}")
                 ret = -1
         
     except psycopg2.Error as e:
-        dlog.error(f"Unable to add product {info['p_code']} to table {schema}.prodotti. {e}")
+        dlog.error(f"register_prodinfo(): Unable to update basic info for product {info['p_code']} in table {schema}.prodotti. {e}")
     return ret
 
 
@@ -184,11 +184,11 @@ def add_detail(schema, p_code, colname, value):
         query = f"UPDATE {schema}.prodotti SET {colname} = {value}{addstr} WHERE codiceprod = {p_code}"
         cursor.execute(query)
         conn.commit()
-        dlog.info(f"Set {colname} = {value}{addstr} for product {p_code} in table {schema}.prodotti.")
+        dlog.info(f"add_detail(): Set {colname} = {value}{addstr} for product {p_code} in table {schema}.prodotti.")
         db_disconnect(conn, cursor)
         return 0
     except psycopg2.Error as e:
-        dlog.error(f"Unable to update detail for product {p_code} in table {schema}.prodotti. {e}")
+        dlog.error(f"add_detail(): Unable to update detail for product {p_code} in table {schema}.prodotti. {e}")
         return -1
 
 
@@ -204,18 +204,18 @@ def register_supplier(schema, supplier, discount, new_name=None):
             query = f"INSERT INTO {schema}.produttori (produttore, scontomedio) VALUES ('{supplier}', {discount})"
             cursor.execute(query)
             conn.commit()
-            dlog.info(f"Registered supplier {supplier}, discount {discount}%, to table {schema}.produttori.")
+            dlog.info(f"register_supplier(): Registered supplier {supplier}, discount {discount}%, to table {schema}.produttori.")
         else:
             #if already in DB -> update info:
             newnamestr = f"produttore = '{new_name}', " if new_name else ""
             query = f"UPDATE {schema}.produttori SET {newnamestr}scontomedio = {discount} WHERE produttore = '{supplier}'"
             cursor.execute(query)
             conn.commit()
-            dlog.info(f"Updated info for supplier {supplier} into table {schema}.produttori.")
+            dlog.info(f"register_supplier(): Updated info for supplier {supplier} into table {schema}.produttori.")
             db_disconnect(conn, cursor)
         return 0
     except psycopg2.Error as e:
-        dlog.error(f"Unable to register supplier {supplier} and discount {discount}% to table {schema}.produttori. {e}")
+        dlog.error(f"register_supplier(): Unable to register supplier {supplier} and discount {discount}% to table {schema}.produttori. {e}")
         return -1
 
 
@@ -231,18 +231,18 @@ def register_category(schema, category, vat, new_name=None):
             query = f"INSERT INTO {schema}.categorie (categoria, aliquota) VALUES ('{category}', {vat})"
             cursor.execute(query)
             conn.commit()
-            dlog.info(f"Registered category {category}, vat rate {vat}%, to table {schema}.categorie.")
+            dlog.info(f"register_category(): Registered category {category}, vat rate {vat}%, to table {schema}.categorie.")
         else:
             #if already in DB -> update info:
             newnamestr = f"categoria = '{new_name}', " if new_name else ""
             query = f"UPDATE {schema}.categorie SET {newnamestr}aliquota = {vat} WHERE categoria = '{category}'"
             cursor.execute(query)
             conn.commit()
-            dlog.info(f"Updated info for category {category} into table {schema}.categorie.")
+            dlog.info(f"register_category(): Updated info for category {category} into table {schema}.categorie.")
             db_disconnect(conn, cursor)
         return 0
     except psycopg2.Error as e:
-        dlog.error(f"Unable to register category {category} and vat rate {vat} to table {schema}.categorie. {e}")
+        dlog.error(f"register_category(): Unable to register category {category} and vat rate {vat} to table {schema}.categorie. {e}")
         return -1
 
 
@@ -255,7 +255,7 @@ def get_storicoordini(schema):
         History = pd.read_sql(query, conn)
         db_disconnect(conn, cursor)
     except psycopg2.Error as e:
-        dlog.error(f"Unable to perform get Storico Ordini from schema {schema}. {e}")
+        dlog.error(f"get_storicoordini(): Unable to perform get Storico Ordini from schema {schema}. {e}")
     return History
 
 
@@ -266,11 +266,11 @@ def delete_prod(schema, p_code):
         query = f"DELETE FROM {schema}.prodotti WHERE codiceprod = {p_code}"
         cursor.execute(query)
         conn.commit()
-        dlog.info(f"Deleted product {p_code} from table {schema}.prodotti.")
+        dlog.info(f"delete_prod(): Deleted product {p_code} from table {schema}.prodotti.")
         db_disconnect(conn, cursor)
         return 0
     except psycopg2.Error as e:
-        dlog.error(f"Unable to delete product {p_code} from table {schema}.prodotti. {e}")
+        dlog.error(f"delete_prod(): Unable to delete product {p_code} from table {schema}.prodotti. {e}")
         return -1
 
 
@@ -283,23 +283,23 @@ def clean_db(schema):
         query = f"DELETE FROM {schema}.prodotti WHERE quantita = 0"
         cursor.execute(query)
         conn.commit()
-        dlog.info(f"Cleaned table {schema}.prodotti.")
+        dlog.info(f"clean_db(): Cleaned table {schema}.prodotti.")
 
         #2) clean table Produttori from suppliers with no products:
         query = f"DELETE FROM {schema}.produttori WHERE NOT EXISTS (SELECT prodotti.produttore FROM {schema}.prodotti WHERE prodotti.produttore = produttori.produttore)"
         cursor.execute(query)
         conn.commit()
-        dlog.info(f"Cleaned table {schema}.produttori.")
+        dlog.info(f"clean_db(): Cleaned table {schema}.produttori.")
         
         #3) clean table Categorie from categories with no products:
         query = f"DELETE FROM {schema}.categorie WHERE NOT EXISTS (SELECT prodotti.categoria FROM {schema}.prodotti WHERE prodotti.categoria = categorie.categoria)"
         cursor.execute(query)
         conn.commit()
-        dlog.info(f"Cleaned table {schema}.categorie.")
+        dlog.info(f"clean_db(): Cleaned table {schema}.categorie.")
 
         db_disconnect(conn, cursor)
         return 0
 
     except psycopg2.Error as e:
-        dlog.error(f"Unable to clean tables in schema {schema} in the DB. {e}")
+        dlog.error(f"clean_db(): Unable to clean tables in schema {schema} in the DB. {e}")
         return -1

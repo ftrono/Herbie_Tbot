@@ -13,7 +13,7 @@ try:
     ENV = 'local'
     config = configparser.ConfigParser()
     print(os.getcwd())
-    config.read(os.getcwd()+"/t_credentials.ini")
+    config.read(os.getcwd()+"/local_credentials.ini")
     t_conf = config['TELEGRAM']
     DATABASE_URL = t_conf.get('database_url')
     HOOK_URL = t_conf.get('hook_url')

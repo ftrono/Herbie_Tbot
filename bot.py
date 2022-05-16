@@ -1107,7 +1107,7 @@ def ask_filter(update, context):
         History = db_interactor.get_storicoordini(schema)
         keyboard = []
         for ind in History.index:
-            definitive = f" - DEF" if History['datamodifica'].iloc[ind] == True else ""
+            definitive = f" - DEF" if History['definitiva'].iloc[ind] == True else ""
             keystr = f"{History['produttore'].iloc[ind]} - {History['datamodifica'].iloc[ind]}{definitive}"
             keyboard.append([InlineKeyboardButton(str(keystr), callback_data=str(History['codiceord'].iloc[ind]))])
         message = context.bot.send_message(chat_id=update.effective_chat.id, text=msg, 
@@ -1146,7 +1146,7 @@ def get_vista(update, context):
         ret = bot_functions.create_view_recap(schema, filename)
     elif choice == 'lista':
         ordcode = int(filter)
-        ret = bot_functions.create_view_listaordine(schema, filename, ordcode)
+        ret, filename = bot_functions.create_view_listaordine(schema, ordcode)
     else:
         context.bot.delete_message(chat_id=update.effective_chat.id, message_id=message.message_id)
         msg = f"Ok. A presto!"

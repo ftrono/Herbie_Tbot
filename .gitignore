@@ -2,4 +2,4 @@ __pycache__
 */__pycache__
 data_cache/*
 logs/*
-t_credentials.ini
+local_credentials.ini

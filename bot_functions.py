@@ -22,7 +22,7 @@ def extract_barcode(image):
     image.download(image_name)
     #read barcode in photo:
     decoded = pyzbar.decode(Image.open(image_name))
-    tlog.info(decoded)
+    tlog.info(f"extract_barcode(): {decoded}")
     for barcode in decoded:
         try:
             p_code = barcode.data
@@ -51,14 +51,14 @@ def inline_picker(schema, column_name):
                 keyboard.append(buf)
                 buf = []
     else:
-        tlog.error("No items found.")
+        tlog.error("inline_picker(): No items found.")
     return keyboard
 
 
 #EXPORT:
 #view Prodotti:
 def create_view_prodotti(schema, filename, supplier=None):
-    headers = {'Codice': 'codiceprod', 'Produttore': 'produttore', 'Nome': 'nome', 'Categoria': 'categoria', 'Quantita': 'quantita', 'Prezzo Pubblico €': 'prezzo', 'Sconto Medio %': 'scontomedio', 'IVA %': 'aliquota', 'Costo Acquisto €': 'costoacquisto', 'Costo Giacenze €': 'costototale', 'Valore Giacenze €': 'valoretotale', 'DispMedico': 'dispmedico', ' Vegano ': 'vegano', 'Senza Lattosio': 'senzalattosio', 'Senza Glutine': 'senzaglutine', 'Senza Zucchero': 'senzazucchero'}
+    headers = {'Codice': 'codiceprod', 'Produttore': 'produttore', 'Nome': 'nome', 'Categoria': 'categoria', 'Quantita': 'quantita', 'Prezzo Pubblico €': 'prezzo', 'Sconto Medio %': 'scontomedio', 'IVA %': 'aliquota', 'Costo Acquisto €': 'costoacquisto', 'Costo Giacenze €': 'costototale', 'Valore Giacenze €': 'valoretotale', 'Disp Medico': 'dispmedico', ' Vegano ': 'vegano', 'Senza Lattosio': 'senzalattosio', 'Senza Glutine': 'senzaglutine', 'Senza Zucchero': 'senzazucchero'}
     #export table to pdf:
     try:
         Prodotti = db_export.get_view_prodotti(schema, supplier)
@@ -120,7 +120,7 @@ def create_view_prodotti(schema, filename, supplier=None):
             writer.save()
         return 0
     except Exception:
-        tlog.exception(f"Export error for xslx Prodotti for schema {schema}. {Exception}")
+        tlog.exception(f"create_view_prodotti(): Export error for xslx Prodotti for schema {schema}. {Exception}")
         return -1
 
 
@@ -174,12 +174,12 @@ def create_view_recap(schema, filename):
             writer.save()
         return 0
     except Exception:
-        tlog.exception(f"Export error for xslx Recap for schema {schema}. {Exception}")
+        tlog.exception(f"create_view_recap(): Export error for xslx Recap for schema {schema}. {Exception}")
         return -1
 
 
-#view ListaOrdine by produttore or codiceord:
-def create_view_listaordine(schema, filename, codiceord):
+#view ListaOrdine by codiceord:
+def create_view_listaordine(schema, codiceord):
     headers = {'Codice Prodotto': 'codiceprod', 'Produttore': 'produttore', 'Nome': 'nome', 'Categoria': 'categoria', 'Quantita Ordine': 'quantita', 'Prezzo Pubblico €': 'prezzo', 'Sconto Medio %': 'scontomedio', 'IVA %': 'aliquota', 'Costo Acquisto €': 'costoacquisto', 'Costo Totale €': 'costototale', 'Valore Totale €': 'valoretotale'}
     #export table to pdf:
     try:
@@ -226,9 +226,12 @@ def create_view_listaordine(schema, filename, codiceord):
             Vista['Costo Totale €'].iloc[-1] = sum(temp_totcost)
             Vista['Valore Totale €'].iloc[-1] = sum(temp_totprice)
             Vista.reset_index(drop=True, inplace=True)
+            supplier = Vista['Produttore'].iloc[0]
+            codedate = str(codiceord) if len(str(codiceord)) < 8 else str(codiceord)[:8]
 
             #2) export:
             #load Pandas Excel exporter:
+            filename = f'./data_cache/{schema}.lista_{supplier}_{codedate}.xlsx'
             writer = pd.ExcelWriter(filename)
             Vista.to_excel(writer, sheet_name=schema, index=False, na_rep='')
             workbook  = writer.book
@@ -245,7 +248,7 @@ def create_view_listaordine(schema, filename, codiceord):
                 else:
                     writer.sheets[schema].set_column(first_col=col_idx, last_col=col_idx, width=column_width)
             writer.save()
-        return 0
+        return 0, filename
     except Exception:
-        tlog.exception(f"Export error for xslx ListaOrdine {codiceord} for schema {schema}. {Exception}")
-        return -1
+        tlog.exception(f"create_view_listaordine(): Export error for xslx ListaOrdine {codiceord} for schema {schema}. {Exception}")
+        return -1, ""
