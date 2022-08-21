@@ -1,6 +1,10 @@
 # Herbie_Tbot
 Repo containing the companion Telegram Bot for *Herbie*, my final project for the Human-Machine Dialogue course 2021-22 at University of Trento.
 
+<img src="./res/Herbie_Tbot.png" alt="drawing" width="250"/>
+
+---
+
 ## Software requirements
 Herbie Telegram Bot has been developed in an **[Ubuntu](https://ubuntu.com/) 20.04 LTS** environment.
 
@@ -37,6 +41,8 @@ Herbie_Tbot
 │   ├── db_events.log
 │   ├── tbot_events.log
 │   └── setfolder.ini
+├── res                            #logging directory
+│   └── Herbie_Tbot.png            #Herbie profile picture
 ├── __init__.py
 ├── Aptfile
 ├── bot.py                          #main Bot file
