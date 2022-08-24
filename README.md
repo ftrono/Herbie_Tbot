@@ -1,6 +1,8 @@
 # Herbie_Tbot
 Repo containing the companion Telegram Bot for *Herbie*, my final project for the Human-Machine Dialogue course 2021-22 at University of Trento.
 
+The demo video for Herbie Telegram Bot can be found at this [link](https://youtu.be/ElItrBWbHqg).
+
 <img src="./res/Herbie_Tbot.png" alt="drawing" width="250"/>
 
 ---
