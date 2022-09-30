@@ -66,14 +66,17 @@ def answer_query(update, context, delete=False):
 
 def code_to_int(p_code):
     #try conversion to int (there might be some initial letters, to be cut):
+    rem = ''
     try:
         try:
             p_code = int(p_code)
         except:
+            rem = p_code[0]
             p_code = int(p_code[1:])
     except:
+        rem = p_code[0:2]
         p_code = int(p_code[2:])
-    return p_code
+    return p_code, rem
 
 
 #COMMANDS & HELPERS
@@ -301,7 +304,7 @@ def process_pcode(update, context):
             context.bot.delete_message(chat_id=update.effective_chat.id, message_id=photo_message)
             #store barcode in bot memory:
             tlog.info(f"Letto codice {p_code}.")
-            p_code = code_to_int(p_code)
+            p_code, rem = code_to_int(p_code)
             context.user_data['p_code'] = p_code
             msg = f"Ho letto il codice {p_code}. "
         except:
@@ -318,7 +321,7 @@ def process_pcode(update, context):
 
         #CASE B.1) NUMERICAL CODE:
         try:
-            p_code = code_to_int(p_text)
+            p_code, rem = code_to_int(p_text)
             #check if the code is the index of a Matches list already sent:
             if p_code in [1, 2, 3]:
                 Matches = context.user_data.get('Matches')
