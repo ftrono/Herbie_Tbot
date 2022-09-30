@@ -7,12 +7,25 @@ from globals import *
 
 #BOT_FUNCTIONS:
 #common data preparers for bot:
+# - code39toCode32()
 # - extract_barcode()
 # - inline_picker()
 # - create_view_prodotti()
 # - create_view_recap()
 # - create_view_listaordine()
 # - create_view_storicoordini()
+
+#convert code39 to Italian Pharmacode (code32):
+def code39toCode32(val):
+    code32set = '0123456789BCDFGHJKLMNPQRSTUVWXYZ'
+    res = 0
+    for i in range(len(val)):
+        res = res * 32 + code32set.index(val[i])
+    code32 = str(res)
+    if len(code32) < 9:
+        code32 = '000000000' + code32
+        code32 = code32[:-9]
+    return code32
 
 
 #scan image for barcodes and extract pcode:
@@ -30,6 +43,12 @@ def extract_barcode(image):
             break
         except:
             pass
+    #check if needed conversion of Italian Pharmacode:
+    try:
+        p_code = int(p_code)
+    except:
+        p_code = code39toCode32(p_code)
+        p_code = int(p_code)
     os.remove(image_name)
     return p_code
 
