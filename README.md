@@ -72,14 +72,10 @@ Then, insert the passcode ("OTP") you received from the admin.
 
 ### Command list
 Herbie Telegram Bot contains the following commands:
-* **“/aggiorna”**:
+* **“/prodotto”**:
     * Register a new Product into the database or update information of a Product already registered
-    * Register a Supplier or update its information
-    * Register a Category or update its information:
-    * DB cleaning (delete products, suppliers and categories with 0 pieces)
 * **“/vista”**: manually download printable views of the warehouse (Excel format):
     * Warehouse inventory view (all or one supplier only)
-    * Recap view with the total inventory quantity and value by supplier / category
     * An order list (in progress or definitive)
 * **“/registrami”**:
     * Needed only once, to authorize the user to the use of the Herbie Telegram Bot (as explained above).
