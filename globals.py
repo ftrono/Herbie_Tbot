@@ -3,8 +3,7 @@ from datetime import datetime, date
 import pandas as pd
 
 #GLOBAL IMPORTS, PARAMETERS & INSTANTIATIONS:
-#Connect to:
-SCHEMA = 'Test'
+#Ita VAT rates:
 VAT = [4, 5, 10, 22]
 
 #CONFIG:
@@ -19,12 +18,14 @@ try:
     DATABASE_URL = t_conf.get('database_url')
     HOOK_URL = t_conf.get('hook_url')
     TOKEN = t_conf.get('token')
+    SCHEMA = t_conf.get('schema')
 except:
     #On cloud -> use global config vars:
     ENV = 'cloud'
     DATABASE_URL = os.environ['DATABASE_URL']
     HOOK_URL = os.environ['HOOK_URL']
     TOKEN = os.environ['TOKEN']
+    SCHEMA = os.environ['SCHEMA']
 
 
 #LOGS:
