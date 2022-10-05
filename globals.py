@@ -5,6 +5,7 @@ import pandas as pd
 #GLOBAL IMPORTS, PARAMETERS & INSTANTIATIONS:
 #Connect to:
 SCHEMA = 'Test'
+VAT = [4, 5, 10, 22]
 
 #CONFIG:
 PORT = int(os.environ.get('PORT', '8443'))
@@ -19,8 +20,8 @@ try:
     HOOK_URL = t_conf.get('hook_url')
     TOKEN = t_conf.get('token')
 except:
-    #On Heroku -> use global config vars:
-    ENV = 'heroku'
+    #On cloud -> use global config vars:
+    ENV = 'cloud'
     DATABASE_URL = os.environ['DATABASE_URL']
     HOOK_URL = os.environ['HOOK_URL']
     TOKEN = os.environ['TOKEN']

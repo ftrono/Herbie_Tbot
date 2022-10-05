@@ -58,34 +58,23 @@ def create_dbo_tables(conn, cursor):
 def create_schema_tables(conn, cursor, schema):
     #dict of queries:
     queries = {
-        'Produttori': f'''CREATE TABLE {schema}.Produttori (
-            Produttore VARCHAR(50) NOT NULL,
-            ScontoMedio SMALLINT NOT NULL DEFAULT 0,
-            PRIMARY KEY (Produttore)
-            )''',
-
-        'Categorie': f'''CREATE TABLE {schema}.Categorie (
-            Categoria VARCHAR(50) NOT NULL,
-            Aliquota NUMERIC(3,1) NOT NULL DEFAULT 22,
-            PRIMARY KEY (Categoria)
-            )''',
-
         'Prodotti': f'''CREATE TABLE {schema}.Prodotti (
-            CodiceProd BIGINT NOT NULL, 
+            CodiceProd VARCHAR(50) NOT NULL, 
             Produttore VARCHAR(50) NOT NULL,
             Nome TEXT NOT NULL, 
             Categoria VARCHAR(50) NOT NULL,
-            Quantita SMALLINT NOT NULL DEFAULT 0,
+            Aliquota NUMERIC(3,1) NOT NULL DEFAULT 22,
             Prezzo NUMERIC(5,2) NOT NULL DEFAULT 0,
+            Costo NUMERIC(5,2) NOT NULL DEFAULT 0,
+            Quantita SMALLINT NOT NULL DEFAULT 0,
             ValoreTotale DECIMAL (8, 2) GENERATED ALWAYS AS (Prezzo * Quantita) STORED,
+            CostoTotale DECIMAL (8, 2) GENERATED ALWAYS AS (Costo * Quantita) STORED,
             DispMedico BOOLEAN NOT NULL DEFAULT FALSE,
             Vegano BOOLEAN NOT NULL DEFAULT FALSE,
             SenzaLattosio BOOLEAN NOT NULL DEFAULT FALSE,
             SenzaGlutine BOOLEAN NOT NULL DEFAULT FALSE,
             SenzaZucchero BOOLEAN NOT NULL DEFAULT FALSE,
-            PRIMARY KEY (CodiceProd),
-            FOREIGN KEY (Produttore) REFERENCES {schema}.Produttori (Produttore) ON DELETE CASCADE ON UPDATE CASCADE,
-            FOREIGN KEY (Categoria) REFERENCES {schema}.Categorie (Categoria) ON DELETE CASCADE ON UPDATE CASCADE
+            PRIMARY KEY (CodiceProd)
             )''',
         
         'StoricoOrdini': f'''CREATE TABLE {schema}.StoricoOrdini (
@@ -99,7 +88,7 @@ def create_schema_tables(conn, cursor, schema):
         'ListeOrdini': f'''CREATE TABLE {schema}.ListeOrdini (
             ID SERIAL NOT NULL,
             CodiceOrd BIGINT NOT NULL, 
-            CodiceProd BIGINT NOT NULL,
+            CodiceProd VARCHAR(50) NOT NULL,
             Quantita SMALLINT NOT NULL DEFAULT 1,
             PRIMARY KEY (ID),
             FOREIGN KEY (CodiceOrd) REFERENCES {schema}.StoricoOrdini (CodiceOrd) ON DELETE CASCADE ON UPDATE CASCADE

@@ -5,6 +5,7 @@ from database.db_tools import db_connect, db_disconnect, create_schema_tables
 #ADMIN TOOLS:
 # - admin_add_schema()
 # - admin_delete_auths()
+# - admin_renew_otp()
 
 
 #add new Schema, generating the related OTP:
@@ -40,3 +41,20 @@ def admin_delete_auths(chat_id, name=None):
     except:
         dlog.error(f"DB query error: user auth not deleted.")
     return -1
+
+
+#add new Schema, generating the related OTP:
+def admin_renew_otp(schema):
+    try:
+        conn, cursor = db_connect()
+        pw = random.randrange(12345678, 98765432)
+        query = f"UPDATE Schemi SET HashOTP = sha224('{pw}') WHERE NomeSchema = '{schema}'"
+        cursor.execute(query)
+        conn.commit()
+        dlog.info(f"Updated Schema {schema} with new OTP {pw}")
+        print(f"Updated Schema {schema} with new OTP {pw}")
+        db_disconnect(conn, cursor)
+        return 0
+    except Exception as e:
+        dlog.error(f"DB query error in updating OTP for Schema {schema}. {e}")
+        return -1

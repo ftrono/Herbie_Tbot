@@ -10,44 +10,48 @@ from database.db_tools import db_connect, db_disconnect
 # - add_prod()
 # - register_prodinfo()
 # - add_detail()
-# - register_supplier()
-# - register_category()
 # - get_storicoordini()
 # - delete_prod()
 # - clean_db()
 
 
 #get all items in a column of Prodotti table:
-def get_auths(chat_id):
+def get_auths(schema, chat_id):
     try:
         conn, cursor = db_connect()
-        query = f"SELECT nomeschema FROM utenti WHERE chatid = {int(chat_id)}"
+        query = f"SELECT * FROM utenti WHERE chatid = {int(chat_id)} AND nomeschema = '{schema}'"
         auths = pd.read_sql(query, conn)
-        auths = auths['nomeschema'].unique().tolist()
         db_disconnect(conn, cursor)
+        if auths.empty == True:
+            return -1
+        else:
+            return 0
     except Exception as e:
-        auths = []
         dlog.error(f"get_auths(): DB query error for Utenti. {e}")
-    return auths
+        return -1
 
 
 #register new user authorization:
-def register_auth(chat_id, otp):
-    schema = -1
+def register_auth(schema, chat_id, otp):
     try:
         conn, cursor = db_connect()
         #1) query for Schema corresponding to the OTP:
-        query = f"SELECT nomeschema FROM schemi WHERE hashotp = sha224('{otp}')"
+        query = f"SELECT * FROM schemi WHERE nomeschema = '{schema}' AND hashotp = sha224('{otp}')"
         match = pd.read_sql(query, conn)
         #2) register user auth for the Schema:
         if match.empty == False:
-            schema = match['nomeschema'].iloc[0]
-            query = f"INSERT INTO utenti (ChatID, nomeschema) VALUES ({chat_id}, '{schema}')"
-            dlog.info(f"register_auth(): Added authorization for user {chat_id} to Schema: {schema}")
+            #check if user already registered to the schema:
+            query = F"SELECT * FROM utenti WHERE nomeschema = '{schema}' AND ChatID = {chat_id}"
+            match = pd.read_sql(query, conn)
+            if match.empty == True:
+                query = f"INSERT INTO utenti (ChatID, nomeschema) VALUES ({chat_id}, '{schema}')"
+                dlog.info(f"register_auth(): Added authorization for user {chat_id} to Schema: {schema}")
+            else:
+                dlog.info(f"register_auth(): User {chat_id} already registered to Schema: {schema}")
             cursor.execute(query)
             conn.commit()
         db_disconnect(conn, cursor)
-        return schema
+        return 0
     except Exception as e:
         dlog.error(f"register_auth(): DB query error in registering user {chat_id}. {e}")
         return -1
@@ -57,12 +61,7 @@ def register_auth(chat_id, otp):
 def get_column(schema, column_name):
     try:
         conn, cursor = db_connect()
-        if column_name == 'produttore':
-            query = f"SELECT produttore FROM {schema}.produttori"
-        elif column_name == 'categoria':
-            query = f"SELECT categoria FROM {schema}.categorie"
-        else:
-            query = f"SELECT DISTINCT {column_name} FROM {schema}.prodotti"
+        query = f"SELECT DISTINCT {column_name} FROM {schema}.prodotti"
         items = pd.read_sql(query, conn)
         items = items[column_name].to_list()
         db_disconnect(conn, cursor)
@@ -84,7 +83,7 @@ def match_product(schema, p_code=None, p_text=None):
         p_code = int(p_code)
         try:
             conn, cursor = db_connect()
-            query = f"SELECT * FROM {schema}.prodotti WHERE codiceprod = {p_code}"
+            query = f"SELECT * FROM {schema}.prodotti WHERE codiceprod = '{p_code}'"
             Prodotti = pd.read_sql(query, conn)
             db_disconnect(conn, cursor)
         except Exception as e:
@@ -135,7 +134,7 @@ def match_product(schema, p_code=None, p_text=None):
 def add_prod(schema, info):
     try:
         conn, cursor = db_connect()
-        query = f"INSERT INTO {schema}.prodotti (codiceprod, produttore, nome, categoria, quantita, prezzo) VALUES ({info['p_code']}, '{info['supplier']}', '{info['p_name']}', '{info['category']}', {info['pieces']}, {info['price']})"
+        query = f"INSERT INTO {schema}.prodotti (codiceprod, produttore, nome, categoria, aliquota, prezzo, costo, quantita, dispmedico) VALUES ('{info['p_code']}', '{info['supplier']}', '{info['p_name']}', '{info['category']}', {info['vat']}, {info['price']}, {info['cost']}, {info['pieces']}, {info['dispmedico']})"
         cursor.execute(query)
         conn.commit()
         dlog.info(f"add_prod(): Added product {info['p_code']} to table {schema}.prodotti.")
@@ -156,7 +155,7 @@ def register_prodinfo(schema, info):
         if ret == -1:
             try:
                 conn, cursor = db_connect()
-                query = f"UPDATE {schema}.prodotti SET produttore = '{info['supplier']}', nome = '{info['p_name']}', categoria = '{info['category']}', quantita = {info['pieces']}, prezzo = {info['price']} WHERE codiceprod = {info['p_code']}"
+                query = f"UPDATE {schema}.prodotti SET produttore = '{info['supplier']}', nome = '{info['p_name']}', categoria = '{info['category']}', aliquota = {info['vat']}, prezzo = {info['price']}, costo = {info['cost']}, quantita = {info['pieces']}, dispmedico = {info['dispmedico']} WHERE codiceprod = '{info['p_code']}'"
                 cursor.execute(query)
                 conn.commit()
                 dlog.info(f"register_prodinfo(): Updated basic info for product {info['p_code']} in table {schema}.prodotti.")
@@ -181,7 +180,7 @@ def add_detail(schema, p_code, colname, value):
             addstr = ""
         #set values:
         conn, cursor = db_connect()
-        query = f"UPDATE {schema}.prodotti SET {colname} = {value}{addstr} WHERE codiceprod = {p_code}"
+        query = f"UPDATE {schema}.prodotti SET {colname} = {value}{addstr} WHERE codiceprod = '{p_code}'"
         cursor.execute(query)
         conn.commit()
         dlog.info(f"add_detail(): Set {colname} = {value}{addstr} for product {p_code} in table {schema}.prodotti.")
@@ -189,60 +188,6 @@ def add_detail(schema, p_code, colname, value):
         return 0
     except psycopg2.Error as e:
         dlog.error(f"add_detail(): Unable to update detail for product {p_code} in table {schema}.prodotti. {e}")
-        return -1
-
-
-#register a new supplier:
-def register_supplier(schema, supplier, discount, new_name=None):
-    try:
-        conn, cursor = db_connect()
-        #1) check if supplier already in DB:
-        query = f"SELECT produttore, scontomedio FROM {schema}.produttori WHERE produttore = '{supplier}'"
-        Match = pd.read_sql(query, conn)
-        if Match.empty == True:
-            #if not exists yet -> register supplier:
-            query = f"INSERT INTO {schema}.produttori (produttore, scontomedio) VALUES ('{supplier}', {discount})"
-            cursor.execute(query)
-            conn.commit()
-            dlog.info(f"register_supplier(): Registered supplier {supplier}, discount {discount}%, to table {schema}.produttori.")
-        else:
-            #if already in DB -> update info:
-            newnamestr = f"produttore = '{new_name}', " if new_name else ""
-            query = f"UPDATE {schema}.produttori SET {newnamestr}scontomedio = {discount} WHERE produttore = '{supplier}'"
-            cursor.execute(query)
-            conn.commit()
-            dlog.info(f"register_supplier(): Updated info for supplier {supplier} into table {schema}.produttori.")
-            db_disconnect(conn, cursor)
-        return 0
-    except psycopg2.Error as e:
-        dlog.error(f"register_supplier(): Unable to register supplier {supplier} and discount {discount}% to table {schema}.produttori. {e}")
-        return -1
-
-
-#register a new category:
-def register_category(schema, category, vat, new_name=None):
-    try:
-        conn, cursor = db_connect()
-        #1) check if category already in DB:
-        query = f"SELECT categoria, aliquota FROM {schema}.categorie WHERE categoria = '{category}'"
-        Match = pd.read_sql(query, conn)
-        if Match.empty == True:
-            #if not exists yet -> register category:
-            query = f"INSERT INTO {schema}.categorie (categoria, aliquota) VALUES ('{category}', {vat})"
-            cursor.execute(query)
-            conn.commit()
-            dlog.info(f"register_category(): Registered category {category}, vat rate {vat}%, to table {schema}.categorie.")
-        else:
-            #if already in DB -> update info:
-            newnamestr = f"categoria = '{new_name}', " if new_name else ""
-            query = f"UPDATE {schema}.categorie SET {newnamestr}aliquota = {vat} WHERE categoria = '{category}'"
-            cursor.execute(query)
-            conn.commit()
-            dlog.info(f"register_category(): Updated info for category {category} into table {schema}.categorie.")
-            db_disconnect(conn, cursor)
-        return 0
-    except psycopg2.Error as e:
-        dlog.error(f"register_category(): Unable to register category {category} and vat rate {vat} to table {schema}.categorie. {e}")
         return -1
 
 
@@ -263,7 +208,7 @@ def get_storicoordini(schema):
 def delete_prod(schema, p_code):
     try:
         conn, cursor = db_connect()
-        query = f"DELETE FROM {schema}.prodotti WHERE codiceprod = {p_code}"
+        query = f"DELETE FROM {schema}.prodotti WHERE codiceprod = '{p_code}'"
         cursor.execute(query)
         conn.commit()
         dlog.info(f"delete_prod(): Deleted product {p_code} from table {schema}.prodotti.")
@@ -284,18 +229,6 @@ def clean_db(schema):
         cursor.execute(query)
         conn.commit()
         dlog.info(f"clean_db(): Cleaned table {schema}.prodotti.")
-
-        #2) clean table Produttori from suppliers with no products:
-        query = f"DELETE FROM {schema}.produttori WHERE NOT EXISTS (SELECT prodotti.produttore FROM {schema}.prodotti WHERE prodotti.produttore = produttori.produttore)"
-        cursor.execute(query)
-        conn.commit()
-        dlog.info(f"clean_db(): Cleaned table {schema}.produttori.")
-        
-        #3) clean table Categorie from categories with no products:
-        query = f"DELETE FROM {schema}.categorie WHERE NOT EXISTS (SELECT prodotti.categoria FROM {schema}.prodotti WHERE prodotti.categoria = categorie.categoria)"
-        cursor.execute(query)
-        conn.commit()
-        dlog.info(f"clean_db(): Cleaned table {schema}.categorie.")
 
         db_disconnect(conn, cursor)
         return 0
