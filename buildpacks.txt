@@ -1,0 +1,4 @@
+Needed buildpacks in Heroku (in order):
+- https://github.com/heroku/heroku-buildpack-apt.git
+- https://github.com/generalui/heroku-buildpack-zbar.git
+- heroku/python
