@@ -59,7 +59,7 @@ def create_schema_tables(conn, cursor, schema):
     #dict of queries:
     queries = {
         'Prodotti': f'''CREATE TABLE {schema}.Prodotti (
-            CodiceProd VARCHAR(50) NOT NULL, 
+            CodiceProd BIGINT NOT NULL, 
             Produttore VARCHAR(50) NOT NULL,
             Nome TEXT NOT NULL, 
             Categoria VARCHAR(50) NOT NULL,
@@ -88,7 +88,7 @@ def create_schema_tables(conn, cursor, schema):
         'ListeOrdini': f'''CREATE TABLE {schema}.ListeOrdini (
             ID SERIAL NOT NULL,
             CodiceOrd BIGINT NOT NULL, 
-            CodiceProd VARCHAR(50) NOT NULL,
+            CodiceProd BIGINT NOT NULL,
             Quantita SMALLINT NOT NULL DEFAULT 1,
             PRIMARY KEY (ID),
             FOREIGN KEY (CodiceOrd) REFERENCES {schema}.StoricoOrdini (CodiceOrd) ON DELETE CASCADE ON UPDATE CASCADE

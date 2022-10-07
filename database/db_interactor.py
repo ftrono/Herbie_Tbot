@@ -83,7 +83,7 @@ def match_product(schema, p_code=None, p_text=None):
         p_code = int(p_code)
         try:
             conn, cursor = db_connect()
-            query = f"SELECT * FROM {schema}.prodotti WHERE codiceprod = '{p_code}'"
+            query = f"SELECT * FROM {schema}.prodotti WHERE codiceprod = {p_code}"
             Prodotti = pd.read_sql(query, conn)
             db_disconnect(conn, cursor)
         except Exception as e:
@@ -134,7 +134,7 @@ def match_product(schema, p_code=None, p_text=None):
 def add_prod(schema, info):
     try:
         conn, cursor = db_connect()
-        query = f"INSERT INTO {schema}.prodotti (codiceprod, produttore, nome, categoria, aliquota, prezzo, costo, quantita, dispmedico) VALUES ('{info['p_code']}', '{info['supplier']}', '{info['p_name']}', '{info['category']}', {info['vat']}, {info['price']}, {info['cost']}, {info['pieces']}, {info['dispmedico']})"
+        query = f"INSERT INTO {schema}.prodotti (codiceprod, produttore, nome, categoria, aliquota, prezzo, costo, quantita, dispmedico) VALUES ({info['p_code']}, '{info['supplier']}', '{info['p_name']}', '{info['category']}', {info['vat']}, {info['price']}, {info['cost']}, {info['pieces']}, {info['dispmedico']})"
         cursor.execute(query)
         conn.commit()
         dlog.info(f"add_prod(): Added product {info['p_code']} to table {schema}.prodotti.")
@@ -155,7 +155,7 @@ def register_prodinfo(schema, info):
         if ret == -1:
             try:
                 conn, cursor = db_connect()
-                query = f"UPDATE {schema}.prodotti SET produttore = '{info['supplier']}', nome = '{info['p_name']}', categoria = '{info['category']}', aliquota = {info['vat']}, prezzo = {info['price']}, costo = {info['cost']}, quantita = {info['pieces']}, dispmedico = {info['dispmedico']} WHERE codiceprod = '{info['p_code']}'"
+                query = f"UPDATE {schema}.prodotti SET produttore = '{info['supplier']}', nome = '{info['p_name']}', categoria = '{info['category']}', aliquota = {info['vat']}, prezzo = {info['price']}, costo = {info['cost']}, quantita = {info['pieces']}, dispmedico = {info['dispmedico']} WHERE codiceprod = {info['p_code']}"
                 cursor.execute(query)
                 conn.commit()
                 dlog.info(f"register_prodinfo(): Updated basic info for product {info['p_code']} in table {schema}.prodotti.")
@@ -180,7 +180,7 @@ def add_detail(schema, p_code, colname, value):
             addstr = ""
         #set values:
         conn, cursor = db_connect()
-        query = f"UPDATE {schema}.prodotti SET {colname} = {value}{addstr} WHERE codiceprod = '{p_code}'"
+        query = f"UPDATE {schema}.prodotti SET {colname} = {value}{addstr} WHERE codiceprod = {p_code}"
         cursor.execute(query)
         conn.commit()
         dlog.info(f"add_detail(): Set {colname} = {value}{addstr} for product {p_code} in table {schema}.prodotti.")
@@ -208,7 +208,7 @@ def get_storicoordini(schema):
 def delete_prod(schema, p_code):
     try:
         conn, cursor = db_connect()
-        query = f"DELETE FROM {schema}.prodotti WHERE codiceprod = '{p_code}'"
+        query = f"DELETE FROM {schema}.prodotti WHERE codiceprod = {p_code}"
         cursor.execute(query)
         conn.commit()
         dlog.info(f"delete_prod(): Deleted product {p_code} from table {schema}.prodotti.")

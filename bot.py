@@ -168,7 +168,7 @@ def process_pcode(update, context):
             #store barcode in bot memory:
             tlog.info(f"Letto codice {p_code}.")
             p_code, rem = bot_functions.code_to_int(p_code)
-            p_code = rem + str(p_code)
+            #p_code = rem + str(p_code)
             context.user_data['p_code'] = p_code
             msg = f"Ho letto il codice {p_code}. "
         except:
@@ -185,15 +185,15 @@ def process_pcode(update, context):
 
         #CASE B.1) NUMERICAL CODE:
         try:
-            p_num, rem = bot_functions.code_to_int(p_text)
-            p_code = rem + str(p_num)
+            p_code, rem = bot_functions.code_to_int(p_text)
+            #p_code = rem + str(p_num)
             #check if the code is the index of a Matches list already sent:
-            if p_num in [1, 2, 3]:
+            if p_code in [1, 2, 3]:
                 Matches = context.user_data.get('Matches')
-                tlog.info(f"Converted code {p_num}")
+                tlog.info(f"Converted code {p_code}")
                 if Matches is not None:
                     try:
-                        ind = p_num-1
+                        ind = p_code-1
                         #if found -> get the reference row and proceed to edit info / add info:
                         Matches = Matches.iloc[[ind]]
                         Matches.reset_index(drop=True, inplace=True)
