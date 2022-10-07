@@ -61,6 +61,7 @@ def extract_barcode(image):
         except:
             pass
     #check if needed conversion of Italian Pharmacode:
+    tlog.info(f"{p_code}")
     try:
         p_code = int(p_code)
     except:
