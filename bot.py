@@ -326,7 +326,7 @@ def ask_supplier(update, context):
         msg = f"Iniziamo. "
     #supplier picker:
     keyboard = bot_functions.inline_picker(SCHEMA, 'produttore')
-    msg = f"{msg}Dimmi il nome del <b>produttore</b>. Oppure usa /esci per uscire.\n\nNOTA: Se non è fra i suggerimenti, inviami direttamente il nome."
+    msg = f"{msg}Dimmi il <b>produttore</b>. Se non è fra i suggerimenti, scrivimi direttamente il nome.\n\nOppure usa /esci per uscire."
     message = context.bot.send_message(chat_id=update.effective_chat.id, text=msg, 
         parse_mode=ParseMode.HTML, 
         reply_markup=InlineKeyboardMarkup(keyboard))
@@ -360,7 +360,7 @@ def ask_pname(update, context, supplier=None):
         msg = f"Scrivimi"
     else:
         msg = f"Segnato produttore '{supplier}'! Ora scrivimi"
-    msg = f"{msg} il nome dettagliato del <b>prodotto</b>. Aggiungi tutte le info necessarie, es.:\n\n<i>Grintuss pediatric sciroppo 12 flaconcini</i>\n\nOppure usa /esci per uscire."
+    msg = f"{msg} il <b>nome</b> dettagliato del prodotto. Aggiungi tutte le info necessarie, es.:\n\n<i>Grintuss pediatric sciroppo 12 flaconcini</i>\n\nOppure usa /esci per uscire."
     message = context.bot.send_message(chat_id=update.effective_chat.id, text=msg, parse_mode=ParseMode.HTML)
     context.user_data["last_sent"] = message.message_id
     return PROCESS_PNAME
@@ -387,7 +387,7 @@ def ask_category(update, context, p_name=None):
         msg = f"Scrivimi a quale <b>categoria</b> appartiene il prodotto"
     else:
         msg = f"Segnato nome '{p_name}'! Ora dimmi a quale <b>categoria</b> appartiene il prodotto"
-    msg = f"{msg} (es. cosmesi, alimentazione, ...). Oppure usa /esci per uscire.\n\nNOTA: Se non è fra i suggerimenti, inviami direttamente il nome."
+    msg = f"{msg} (es. cosmesi, alimentazione, ...). Se non è fra i suggerimenti, inviami direttamente il nome.\n\nOppure usa /esci per uscire."
     #category picker:
     keyboard = bot_functions.inline_picker(SCHEMA, 'categoria')
     message = context.bot.send_message(chat_id=update.effective_chat.id, text=msg, 

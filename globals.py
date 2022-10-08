@@ -4,7 +4,7 @@ import pandas as pd
 
 #GLOBAL IMPORTS, PARAMETERS & INSTANTIATIONS:
 #Ita VAT rates:
-VAT = [4, 5, 10, 22]
+VAT = [4, 10, 22]
 
 #CONFIG:
 PORT = int(os.environ.get('PORT', '8443'))
