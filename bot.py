@@ -360,7 +360,7 @@ def ask_pname(update, context, supplier=None):
         msg = f"Scrivimi"
     else:
         msg = f"Segnato produttore '{supplier}'! Ora scrivimi"
-    msg = f"{msg} il <b>nome</b> dettagliato del prodotto. Aggiungi tutte le info necessarie, es.:\n\n<i>Grintuss pediatric sciroppo 12 flaconcini</i>\n\nOppure usa /esci per uscire."
+    msg = f"{msg} il <b>nome</b> dettagliato del prodotto. Aggiungi tutte le info necessarie, es.:\n<i>Grintuss pediatric sciroppo 12 flaconcini</i>\n\nOppure usa /esci per uscire."
     message = context.bot.send_message(chat_id=update.effective_chat.id, text=msg, parse_mode=ParseMode.HTML)
     context.user_data["last_sent"] = message.message_id
     return PROCESS_PNAME
@@ -387,7 +387,7 @@ def ask_category(update, context, p_name=None):
         msg = f"Scrivimi a quale <b>categoria</b> appartiene il prodotto"
     else:
         msg = f"Segnato nome '{p_name}'! Ora dimmi a quale <b>categoria</b> appartiene il prodotto"
-    msg = f"{msg} (es. cosmesi, alimentazione, ...). Se non è fra i suggerimenti, inviami direttamente il nome.\n\nOppure usa /esci per uscire."
+    msg = f"{msg} (es. cosmesi, alimentazione, ...). Se non è fra i suggerimenti, scrivimi direttamente il nome.\n\nOppure usa /esci per uscire."
     #category picker:
     keyboard = bot_functions.inline_picker(SCHEMA, 'categoria')
     message = context.bot.send_message(chat_id=update.effective_chat.id, text=msg, 
@@ -420,9 +420,9 @@ def process_category(update, context):
 def ask_vat(update, context, category=None):
     #if caller is edit info:
     if context.user_data.get('to_edit') != None:
-        msg = f"Dimmi"
+        msg = f"Seleziona"
     else:
-        msg = f"Segnata categoria '{category}'! Ora dimmi"
+        msg = f"Segnata categoria '{category}'! Ora seleziona"
     msg = f"{msg} l'<b>aliquota IVA</b> applicabile.\n\nOppure usa /esci per uscire."
     #vat picker:
     keyboard = []
@@ -475,7 +475,7 @@ def ask_price(update, context, vat=None):
     else:
         msg = f"Segnata aliquota {vat}%! "
     msg = f"{msg}Qual è il <b>prezzo al pubblico</b> del prodotto?\n"+\
-            f"Scrivi solo la <i>cifra</i> in Euro (es. 10 o 10,50)."
+            f"Scrivi solo la <i>cifra</i> in Euro (es. 10 o 10,50) senza simboli di valuta."
     message = context.bot.send_message(chat_id=update.effective_chat.id, text=msg,
         parse_mode=ParseMode.HTML)
     context.user_data["last_sent"] = message.message_id
@@ -513,7 +513,7 @@ def ask_cost(update, context, price=None):
     else:
         msg = f"Segnato prezzo {price:.2f}€! "
     msg = f"{msg}Qual è il <b>costo d'acquisto</b> del prodotto?\n"+\
-            f"Scrivi solo la <i>cifra</i> in Euro (es. 8 o 8,50)."
+            f"Scrivi solo la <i>cifra</i> in Euro (es. 8 o 8,50) senza simboli di valuta."
     message = context.bot.send_message(chat_id=update.effective_chat.id, text=msg,
         parse_mode=ParseMode.HTML)
     context.user_data["last_sent"] = message.message_id
@@ -585,7 +585,7 @@ def ask_pieces(update, context, disp=None):
         msg = f""
     else:
         msg = f"Segnato '{disp}'. "
-    msg = f"{msg}Mi dici il <b>numero di pezzi</b> che hai in magazzino?\n\nScrivi solo la <i>cifra</i>, es. 1, 10, ...\n\nOppure usa /esci per uscire."
+    msg = f"{msg}Mi dici il <b>numero di pezzi</b> che hai in magazzino?\nScrivi solo la <i>cifra</i>, es. 1, 10, ...\n\nOppure usa /esci per uscire."
     message = context.bot.send_message(chat_id=update.effective_chat.id, text=msg, parse_mode=ParseMode.HTML)
     context.user_data["last_sent"] = message.message_id
     return PROCESS_PIECES
